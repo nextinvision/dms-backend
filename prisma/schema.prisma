@@ -1,0 +1,564 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  CALL_CENTER
+  SERVICE_ADVISOR
+  SC_MANAGER
+  SC_STAFF
+  SERVICE_ENGINEER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ServiceCenterStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  ASSIGN
+  TRANSFER
+  PAYMENT
+  EXPORT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalType {
+  SERVICE_REQUEST
+  WARRANTY_CLAIM
+  STOCK_TRANSFER
+  STOCK_ADJUSTMENT
+  DISCOUNT_REQUEST
+  REFUND_REQUEST
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  ONLINE
+  CHEQUE
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+enum ComplaintSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  phone         String?     @unique
+  password      String
+  firstName     String
+  lastName      String?
+  role          UserRole
+  status        UserStatus  @default(ACTIVE)
+  
+  // Service Center Assignment (many-to-many)
+  serviceCenters ServiceCenterAssignment[]
+  
+  // Audit
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  lastLoginAt   DateTime?
+  createdBy     String?
+  updatedBy     String?
+  
+  // Relations
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  createdUsers  User[]      @relation("UserCreatedBy")
+  updatedUsers  User[]      @relation("UserUpdatedBy")
+  creator       User?       @relation("UserCreatedBy", fields: [createdBy], references: [id])
+  updater       User?       @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
+  
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Session {
+  id            String      @id @default(uuid())
+  userId        String
+  refreshToken  String      @unique
+  ipAddress     String?
+  userAgent     String?
+  expiresAt     DateTime
+  createdAt     DateTime    @default(now())
+  
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+// ============================================
+// SERVICE CENTER
+// ============================================
+
+model ServiceCenter {
+  id              String      @id @default(uuid())
+  name            String
+  code            String      @unique
+  address         String
+  city            String
+  state           String
+  pincode         String
+  phone           String?
+  email           String?
+  status          ServiceCenterStatus @default(ACTIVE)
+  
+  // Operational Config
+  capacity        Int?        // Max concurrent jobs
+  technicianCount Int?        // Number of technicians
+  serviceRadius   Float?      // Service radius in km
+  homeServiceEnabled Boolean  @default(false)
+  
+  // Financial Setup
+  invoicePrefix   String?     // e.g., "SC001-INV-"
+  bankName        String?
+  bankAccount     String?
+  bankIFSC        String?
+  gstNumber       String?
+  panNumber       String?
+  
+  // Service Capabilities
+  serviceTypes    String[]    // Array of service types
+  
+  // Audit
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  createdBy       String?
+  updatedBy       String?
+  
+  // Relations
+  assignments     ServiceCenterAssignment[]
+  inventory       Inventory[]
+  jobCards        JobCard[]
+  invoices        Invoice[]
+  stockTransfers  StockTransfer[]
+  complaints      Complaint[]
+  
+  @@index([code])
+  @@index([status])
+  @@index([city])
+  @@map("service_centers")
+}
+
+model ServiceCenterAssignment {
+  id              String      @id @default(uuid())
+  userId          String
+  serviceCenterId String
+  assignedAt      DateTime    @default(now())
+  assignedBy      String?
+  
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, serviceCenterId])
+  @@index([userId])
+  @@index([serviceCenterId])
+  @@map("service_center_assignments")
+}
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  userId        String?
+  action        AuditAction
+  entityType    String?     // e.g., "User", "ServiceCenter", "Invoice"
+  entityId      String?
+  description   String?
+  ipAddress     String?
+  userAgent     String?
+  metadata      Json?       // Additional data
+  createdAt     DateTime    @default(now())
+  
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// CUSTOMER & VEHICLE
+// ============================================
+
+model Customer {
+  id            String      @id @default(uuid())
+  firstName     String
+  lastName      String?
+  phone         String      @unique
+  email         String?
+  address       String?
+  city          String?
+  state         String?
+  pincode       String?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  vehicles      Vehicle[]
+  invoices      Invoice[]
+  complaints    Complaint[]
+  
+  @@index([phone])
+  @@index([email])
+  @@map("customers")
+}
+
+model Vehicle {
+  id            String      @id @default(uuid())
+  customerId    String
+  make          String
+  model         String
+  year          Int?
+  registration  String      @unique
+  vin           String      @unique
+  color         String?
+  fuelType      String?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  jobCards      JobCard[]
+  serviceHistory ServiceHistory[]
+  
+  @@index([registration])
+  @@index([vin])
+  @@index([customerId])
+  @@map("vehicles")
+}
+
+model ServiceHistory {
+  id            String      @id @default(uuid())
+  vehicleId     String
+  serviceCenterId String?
+  jobCardId     String?
+  serviceDate   DateTime
+  serviceType   String
+  description   String?
+  totalAmount   Decimal     @default(0)
+  
+  createdAt     DateTime    @default(now())
+  
+  vehicle       Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  
+  @@index([vehicleId, serviceDate(sort: Desc)])
+  @@index([serviceCenterId])
+  @@map("service_history")
+}
+
+// ============================================
+// JOB CARDS
+// ============================================
+
+model JobCard {
+  id            String      @id @default(uuid())
+  jobNumber     String      @unique
+  serviceCenterId String
+  vehicleId     String
+  customerId    String
+  
+  serviceType   String
+  description   String?
+  status        String      @default("created") // created, approved, assigned, in_progress, completed, invoiced, delivered
+  
+  assignedEngineerId String?
+  estimatedCost Decimal?
+  actualCost    Decimal?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  completedAt   DateTime?
+  
+  serviceCenter ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  vehicle       Vehicle     @relation(fields: [vehicleId], references: [id])
+  
+  @@index([serviceCenterId])
+  @@index([status])
+  @@index([assignedEngineerId])
+  @@map("job_cards")
+}
+
+// ============================================
+// INVENTORY
+// ============================================
+
+model Part {
+  id            String      @id @default(uuid())
+  sku           String      @unique
+  name          String
+  description   String?
+  category      String?
+  manufacturer  String?
+  unitPrice     Decimal     @default(0)
+  supplier      String?
+  reorderLevel  Int         @default(0)
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  inventory     Inventory[]
+  transferItems StockTransferItem[]
+  
+  @@index([sku])
+  @@index([category])
+  @@map("parts")
+}
+
+model Inventory {
+  id            String      @id @default(uuid())
+  serviceCenterId String
+  partId        String
+  quantity      Int         @default(0)
+  minLevel      Int         @default(0)
+  maxLevel      Int?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  serviceCenter ServiceCenter @relation(fields: [serviceCenterId], references: [id], onDelete: Cascade)
+  part          Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
+  
+  @@unique([serviceCenterId, partId])
+  @@index([serviceCenterId])
+  @@index([partId])
+  @@map("inventory")
+}
+
+model StockTransfer {
+  id            String      @id @default(uuid())
+  transferNumber String     @unique
+  fromServiceCenterId String?
+  toServiceCenterId String
+  status        String      @default("pending") // pending, approved, in_transit, received, rejected
+  requestedBy   String?
+  approvedBy    String?
+  approvedAt    DateTime?
+  receivedAt    DateTime?
+  notes         String?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  serviceCenter ServiceCenter @relation(fields: [toServiceCenterId], references: [id])
+  items         StockTransferItem[]
+  approval      Approval? @relation
+  
+  @@index([status])
+  @@index([toServiceCenterId])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id            String      @id @default(uuid())
+  transferId    String
+  partId        String
+  quantity      Int
+  receivedQuantity Int?     @default(0)
+  
+  transfer      StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  part          Part        @relation(fields: [partId], references: [id])
+  
+  @@index([transferId])
+  @@map("stock_transfer_items")
+}
+
+// ============================================
+// APPROVALS
+// ============================================
+
+model Approval {
+  id            String      @id @default(uuid())
+  type          ApprovalType
+  status        ApprovalStatus @default(PENDING)
+  entityType    String      // e.g., "ServiceRequest", "StockTransfer"
+  entityId      String
+  stockTransferId String?   @unique // Optional foreign key for StockTransfer
+  requestedBy   String?
+  approvedBy    String?
+  approvedAt    DateTime?
+  rejectedBy    String?
+  rejectedAt    DateTime?
+  comments      String?
+  rejectionReason String?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  stockTransfer StockTransfer? @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
+  
+  @@index([type, status])
+  @@index([entityType, entityId])
+  @@index([requestedBy])
+  @@index([stockTransferId])
+  @@map("approvals")
+}
+
+// ============================================
+// INVOICING & PAYMENTS
+// ============================================
+
+model Invoice {
+  id            String      @id @default(uuid())
+  invoiceNumber String      @unique
+  serviceCenterId String
+  customerId    String
+  jobCardId     String?
+  
+  subtotal      Decimal     @default(0)
+  tax           Decimal     @default(0)
+  discount      Decimal     @default(0)
+  totalAmount   Decimal     @default(0)
+  paidAmount    Decimal     @default(0)
+  status        InvoiceStatus @default(UNPAID)
+  
+  dueDate       DateTime?
+  paidAt        DateTime?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  serviceCenter ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  payments      Payment[]
+  
+  @@index([serviceCenterId])
+  @@index([status])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+model Payment {
+  id            String      @id @default(uuid())
+  invoiceId     String
+  amount        Decimal
+  method        PaymentMethod
+  reference     String?
+  notes         String?
+  
+  createdAt     DateTime    @default(now())
+  
+  invoice       Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+// ============================================
+// COMPLAINTS
+// ============================================
+
+model Complaint {
+  id            String      @id @default(uuid())
+  complaintNumber String    @unique
+  serviceCenterId String?
+  customerId    String
+  jobCardId     String?
+  
+  title         String
+  description   String
+  severity      ComplaintSeverity @default(MEDIUM)
+  status        ComplaintStatus @default(OPEN)
+  
+  assignedTo    String?     // User ID
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  resolution    String?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  serviceCenter ServiceCenter? @relation(fields: [serviceCenterId], references: [id], onDelete: SetNull)
+  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([severity])
+  @@index([serviceCenterId])
+  @@index([assignedTo])
+  @@map("complaints")
+}
+
+// ============================================
+// SYSTEM CONFIGURATION
+// ============================================
+
+model SystemConfig {
+  id            String      @id @default(uuid())
+  key           String      @unique
+  value         String
+  description   String?
+  category      String?     // e.g., "email", "sms", "business_rules", "security"
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  updatedBy     String?
+  
+  @@index([key])
+  @@index([category])
+  @@map("system_config")
+}
