@@ -7,558 +7,515 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// ENUMS
-// ============================================
+// Auth & Multi-Tenancy
+model ServiceCenter {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  address     String?
+  city        String?
+  state       String?
+  phone       String?
+  email       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  customers   Customer[] @relation("LastServiceCenter")
+  jobCards    JobCard[]
+  inventory   Inventory[]
+  partsIssues PartsIssue[]
+  appointments Appointment[]
+  invoices     Invoice[]
+  quotations   Quotation[]
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  password         String
+  name             String
+  role             UserRole       @default(service_engineer)
+  serviceCenterId  String?
+  serviceCenter    ServiceCenter? @relation(fields: [serviceCenterId], references: [id], onDelete: SetNull)
+  phone            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  jobCards         JobCard[]      @relation("AssignedEngineer")
+  requestedIssues  PartsIssue[]   @relation("RequestedBy")
+
+  @@index([serviceCenterId])
+}
 
 enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  CALL_CENTER
-  SERVICE_ADVISOR
-  SC_MANAGER
-  SC_STAFF
-  SERVICE_ENGINEER
+  admin
+  sc_manager
+  service_engineer
+  service_advisor
+  inventory_manager
+  central_inventory_manager
 }
 
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
+// Customer
+model Customer {
+  id                  String    @id @default(uuid())
+  customerNumber      String    @unique
+  name                String
+  phone               String
+  whatsappNumber      String?
+  alternateNumber     String?
+  email               String?
+  address             String?
+  cityState           String?
+  pincode             String?
+  customerType        String?   @default("B2C")
+  lastServiceCenterId String?
+  lastServiceCenter   ServiceCenter? @relation("LastServiceCenter", fields: [lastServiceCenterId], references: [id])
+  lastServiceDate     DateTime?
+  lastInvoiceNumber   String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+  
+  vehicles      Vehicle[]
+  appointments  Appointment[]
+  jobCards      JobCard[]
+  quotations    Quotation[]
+  invoices      Invoice[]
+  
+  @@index([phone])
+  @@index([customerNumber])
 }
 
-enum ServiceCenterStatus {
-  ACTIVE
-  INACTIVE
-  MAINTENANCE
+// Vehicle
+model Vehicle {
+  id                   String    @id @default(uuid())
+  customerId           String
+  customer             Customer  @relation(fields: [customerId], references: [id])
+  registration         String    @unique
+  vin                  String    @unique
+  vehicleMake          String
+  vehicleModel         String
+  vehicleYear          Int
+  variant              String?
+  vehicleColor         String?
+  motorNumber          String?
+  chargerSerialNumber  String?
+  purchaseDate         DateTime?
+  warrantyStatus       String?
+  insuranceStartDate   DateTime?
+  insuranceEndDate     DateTime?
+  insuranceCompanyName String?
+  currentStatus        VehicleStatus @default(AVAILABLE)
+  activeJobCardId      String?
+  lastServiceDate      DateTime?
+  lastServiceCenterId  String?
+  nextServiceDate      DateTime?
+  totalServices        Int       @default(0)
+  totalSpent           Decimal   @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  
+  appointments  Appointment[]
+  jobCards      JobCard[]
+  quotations    Quotation[]
+  invoices      Invoice[]
+
+  @@index([customerId])
+  @@index([registration])
+  @@index([vin])
 }
 
-enum AuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  APPROVE
-  REJECT
-  ASSIGN
-  TRANSFER
-  PAYMENT
-  EXPORT
+enum VehicleStatus {
+  AVAILABLE
+  ACTIVE_JOB_CARD
 }
 
-enum ApprovalStatus {
+// Appointment
+model Appointment {
+  id                 String            @id @default(uuid())
+  appointmentNumber  String            @unique
+  customerId         String
+  customer           Customer          @relation(fields: [customerId], references: [id])
+  vehicleId          String
+  vehicle            Vehicle           @relation(fields: [vehicleId], references: [id])
+  serviceCenterId    String
+  serviceCenter      ServiceCenter     @relation(fields: [serviceCenterId], references: [id])
+  serviceType        String
+  appointmentDate    DateTime
+  appointmentTime    String
+  customerComplaint  String?
+  location           AppointmentLocation @default(STATION)
+  estimatedCost      Decimal?
+  status             AppointmentStatus   @default(PENDING)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  jobCards           JobCard[]
+
+  @@index([serviceCenterId])
+  @@index([customerId])
+  @@index([vehicleId])
+}
+
+enum AppointmentLocation {
+  STATION
+  HOME
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// JobCard
+model JobCard {
+  id                 String        @id @default(uuid())
+  jobCardNumber      String        @unique
+  serviceCenterId    String
+  serviceCenter      ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  customerId         String
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  vehicleId          String
+  vehicle            Vehicle       @relation(fields: [vehicleId], references: [id])
+  assignedEngineerId String?
+  assignedEngineer   User?         @relation("AssignedEngineer", fields: [assignedEngineerId], references: [id])
+  appointmentId      String?
+  appointment        Appointment?  @relation(fields: [appointmentId], references: [id])
+  status             JobCardStatus @default(CREATED)
+  priority           JobCardPriority @default(MEDIUM)
+  location           AppointmentLocation @default(STATION)
+  serviceType        String
+  estimatedCost      Decimal?
+  part1Data          Json?         // Historical snapshot
+  part2AData         Json?         // Warranty case data
+  part3Data          Json?         // Requisition data
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  
+  items         JobCardItem[]
+  partsRequests PartsRequest[]
+  invoices      Invoice[]
+  
+  @@index([serviceCenterId, status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([vehicleId, createdAt])
+}
+
+enum JobCardStatus {
+  CREATED
+  ASSIGNED
+  IN_PROGRESS
+  PARTS_PENDING
+  COMPLETED
+  INVOICED
+}
+
+enum JobCardPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// JobCardItem
+model JobCardItem {
+  id              String   @id @default(uuid())
+  jobCardId       String
+  jobCard         JobCard  @relation(fields: [jobCardId], references: [id])
+  srNo            Int
+  partWarrantyTag Boolean  @default(false)
+  partName        String
+  partCode        String
+  qty             Int
+  amount          Decimal
+  technician      String?
+  labourCode      String?
+  itemType        String   // "part" | "work_item"
+  serialNumber    String?
+  isWarranty      Boolean  @default(false)
+  
+  @@index([jobCardId])
+}
+
+// Parts Request
+model PartsRequest {
+  id              String             @id @default(uuid())
+  jobCardId       String
+  jobCard         JobCard            @relation(fields: [jobCardId], references: [id])
+  status          PartsRequestStatus @default(PENDING)
+  urgency         JobCardPriority    @default(MEDIUM)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  items           PartsRequestItem[]
+
+  @@index([jobCardId])
+}
+
+enum PartsRequestStatus {
   PENDING
   APPROVED
+  PARTIALLY_APPROVED
   REJECTED
+  COMPLETED
+}
+
+model PartsRequestItem {
+  id              String       @id @default(uuid())
+  requestId       String
+  request         PartsRequest @relation(fields: [requestId], references: [id])
+  inventoryPartId String
+  requestedQty    Int
+  approvedQty     Int          @default(0)
+  isWarranty      Boolean      @default(false)
+
+  @@index([requestId])
+}
+
+// Inventory (Service Center)
+model Inventory {
+  id              String   @id @default(uuid())
+  serviceCenterId String
+  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  partName        String
+  partNumber      String
+  category        String
+  unitPrice       Decimal
+  costPrice       Decimal
+  gstRate         Int
+  stockQuantity   Int
+  minStockLevel   Int
+  maxStockLevel   Int
+  location        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([serviceCenterId, stockQuantity])
+  @@index([partNumber])
+}
+
+// Central Inventory
+model CentralInventory {
+  id            String   @id @default(uuid())
+  partName      String
+  partNumber    String   @unique
+  category      String
+  unitPrice     Decimal
+  costPrice     Decimal
+  gstRate       Int
+  stockQuantity Int
+  allocated     Int      @default(0)  // In pending issues
+  available     Int      // Computed in logic
+  minStockLevel Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([partNumber])
+}
+
+// Supplier
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+}
+
+// Purchase Order
+model PurchaseOrder {
+  id                    String   @id @default(uuid())
+  poNumber              String   @unique
+  supplierId            String
+  supplier              Supplier @relation(fields: [supplierId], references: [id])
+  status                POStatus @default(DRAFT)
+  orderDate             DateTime
+  expectedDeliveryDate  DateTime?
+  receivedDate          DateTime?
+  subtotal              Decimal
+  cgst                  Decimal
+  sgst                  Decimal
+  totalAmount           Decimal
+  paymentTerms          String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  items POItem[]
+  
+  @@index([status])
+}
+
+enum POStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  RECEIVED
+  PARTIALLY_RECEIVED
+  COMPLETED
   CANCELLED
 }
 
-enum ApprovalType {
-  SERVICE_REQUEST
-  WARRANTY_CLAIM
-  STOCK_TRANSFER
-  STOCK_ADJUSTMENT
-  DISCOUNT_REQUEST
-  REFUND_REQUEST
+model POItem {
+  id                     String        @id @default(uuid())
+  purchaseOrderId       String
+  purchaseOrder         PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  centralInventoryPartId String
+  quantity               Int
+  receivedQty            Int           @default(0)
+  unitPrice              Decimal
+  gstRate                Int
+
+  @@index([purchaseOrderId])
+}
+
+// Parts Issue (Central → SC)
+model PartsIssue {
+  id                  String    @id @default(uuid())
+  issueNumber         String    @unique
+  toServiceCenterId   String
+  toServiceCenter     ServiceCenter @relation(fields: [toServiceCenterId], references: [id])
+  requestedById       String
+  requestedBy         User      @relation("RequestedBy", fields: [requestedById], references: [id])
+  status              IssueStatus @default(PENDING_APPROVAL)
+  priority            JobCardPriority @default(MEDIUM)
+  dispatchedDate      DateTime?
+  receivedDate        DateTime?
+  transportDetails    Json?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  items PartsIssueItem[]
+  
+  @@index([toServiceCenterId])
+  @@index([status])
+}
+
+enum IssueStatus {
+  PENDING_APPROVAL
+  APPROVED
+  DISPATCHED
+  COMPLETED
+  REJECTED
+}
+
+model PartsIssueItem {
+  id                     String     @id @default(uuid())
+  issueId                String
+  issue                  PartsIssue @relation(fields: [issueId], references: [id])
+  centralInventoryPartId String
+  requestedQty           Int
+  approvedQty            Int        @default(0)
+  receivedQty            Int        @default(0)
+
+  @@index([issueId])
+}
+
+// Quotation
+model Quotation {
+  id                String   @id @default(uuid())
+  quotationNumber   String   @unique
+  serviceCenterId   String
+  serviceCenter     ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id])
+  vehicleId         String
+  vehicle           Vehicle  @relation(fields: [vehicleId], references: [id])
+  appointmentId     String?
+  status            QuotationStatus @default(DRAFT)
+  subtotal          Decimal
+  cgst              Decimal
+  sgst              Decimal
+  totalAmount       Decimal
+  discount          Decimal @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  items             QuotationItem[]
+
+  @@index([serviceCenterId])
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+}
+
+model QuotationItem {
+  id          String    @id @default(uuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  partName    String
+  partNumber  String?
+  quantity    Int
+  rate        Decimal
+  gstPercent  Int
+
+  @@index([quotationId])
+}
+
+// Invoice
+model Invoice {
+  id               String   @id @default(uuid())
+  invoiceNumber    String   @unique
+  serviceCenterId  String
+  serviceCenter    ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  customerId       String
+  customer         Customer @relation(fields: [customerId], references: [id])
+  vehicleId        String
+  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id])
+  jobCardId        String?
+  jobCard          JobCard? @relation(fields: [jobCardId], references: [id])
+  status           InvoiceStatus @default(UNPAID)
+  subtotal         Decimal
+  cgst             Decimal
+  sgst             Decimal
+  grandTotal       Decimal
+  placeOfSupply    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  items            InvoiceItem[]
+
+  @@index([serviceCenterId])
+  @@index([jobCardId])
 }
 
 enum InvoiceStatus {
   UNPAID
-  PARTIAL
   PAID
-  OVERDUE
   CANCELLED
 }
 
-enum PaymentMethod {
-  CASH
-  CARD
-  UPI
-  ONLINE
-  CHEQUE
-}
+model InvoiceItem {
+  id         String   @id @default(uuid())
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+  name       String
+  hsnSacCode String?
+  unitPrice  Decimal
+  quantity   Int
+  gstRate    Int
 
-enum ComplaintStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-  ESCALATED
-}
-
-enum ComplaintSeverity {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-// ============================================
-// USER & AUTHENTICATION
-// ============================================
-
-model User {
-  id            String      @id @default(uuid())
-  email         String      @unique
-  phone         String?     @unique
-  password      String
-  firstName     String
-  lastName      String?
-  role          UserRole
-  status        UserStatus  @default(ACTIVE)
-  
-  // Service Center Assignment (many-to-many)
-  serviceCenters ServiceCenterAssignment[]
-  
-  // Audit
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  lastLoginAt   DateTime?
-  createdBy     String?
-  updatedBy     String?
-  
-  // Relations
-  sessions      Session[]
-  auditLogs     AuditLog[]
-  createdUsers  User[]      @relation("UserCreatedBy")
-  updatedUsers  User[]      @relation("UserUpdatedBy")
-  creator       User?       @relation("UserCreatedBy", fields: [createdBy], references: [id])
-  updater       User?       @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
-  
-  @@index([email])
-  @@index([role])
-  @@index([status])
-  @@map("users")
-}
-
-model Session {
-  id            String      @id @default(uuid())
-  userId        String
-  refreshToken  String      @unique
-  ipAddress     String?
-  userAgent     String?
-  expiresAt     DateTime
-  createdAt     DateTime    @default(now())
-  
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@index([userId])
-  @@index([refreshToken])
-  @@map("sessions")
-}
-
-// ============================================
-// SERVICE CENTER
-// ============================================
-
-model ServiceCenter {
-  id              String      @id @default(uuid())
-  name            String
-  code            String      @unique
-  address         String
-  city            String
-  state           String
-  pincode         String
-  phone           String?
-  email           String?
-  status          ServiceCenterStatus @default(ACTIVE)
-  
-  // Operational Config
-  capacity        Int?        // Max concurrent jobs
-  technicianCount Int?        // Number of technicians
-  serviceRadius   Float?      // Service radius in km
-  homeServiceEnabled Boolean  @default(false)
-  
-  // Financial Setup
-  invoicePrefix   String?     // e.g., "SC001-INV-"
-  bankName        String?
-  bankAccount     String?
-  bankIFSC        String?
-  gstNumber       String?
-  panNumber       String?
-  
-  // Service Capabilities
-  serviceTypes    String[]    // Array of service types
-  
-  // Audit
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  createdBy       String?
-  updatedBy       String?
-  
-  // Relations
-  assignments     ServiceCenterAssignment[]
-  inventory       Inventory[]
-  jobCards        JobCard[]
-  invoices        Invoice[]
-  stockTransfers  StockTransfer[]
-  complaints      Complaint[]
-  
-  @@index([code])
-  @@index([status])
-  @@index([city])
-  @@map("service_centers")
-}
-
-model ServiceCenterAssignment {
-  id              String      @id @default(uuid())
-  userId          String
-  serviceCenterId String
-  assignedAt      DateTime    @default(now())
-  assignedBy      String?
-  
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id], onDelete: Cascade)
-  
-  @@unique([userId, serviceCenterId])
-  @@index([userId])
-  @@index([serviceCenterId])
-  @@map("service_center_assignments")
-}
-
-// ============================================
-// AUDIT LOGS
-// ============================================
-
-model AuditLog {
-  id            String      @id @default(uuid())
-  userId        String?
-  action        AuditAction
-  entityType    String?     // e.g., "User", "ServiceCenter", "Invoice"
-  entityId      String?
-  description   String?
-  ipAddress     String?
-  userAgent     String?
-  metadata      Json?       // Additional data
-  createdAt     DateTime    @default(now())
-  
-  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
-  @@index([userId])
-  @@index([action])
-  @@index([entityType, entityId])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
-
-// ============================================
-// CUSTOMER & VEHICLE
-// ============================================
-
-model Customer {
-  id            String      @id @default(uuid())
-  firstName     String
-  lastName      String?
-  phone         String      @unique
-  email         String?
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  vehicles      Vehicle[]
-  invoices      Invoice[]
-  complaints    Complaint[]
-  
-  @@index([phone])
-  @@index([email])
-  @@map("customers")
-}
-
-model Vehicle {
-  id            String      @id @default(uuid())
-  customerId    String
-  make          String
-  model         String
-  year          Int?
-  registration  String      @unique
-  vin           String      @unique
-  color         String?
-  fuelType      String?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  jobCards      JobCard[]
-  serviceHistory ServiceHistory[]
-  
-  @@index([registration])
-  @@index([vin])
-  @@index([customerId])
-  @@map("vehicles")
-}
-
-model ServiceHistory {
-  id            String      @id @default(uuid())
-  vehicleId     String
-  serviceCenterId String?
-  jobCardId     String?
-  serviceDate   DateTime
-  serviceType   String
-  description   String?
-  totalAmount   Decimal     @default(0)
-  
-  createdAt     DateTime    @default(now())
-  
-  vehicle       Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  
-  @@index([vehicleId, serviceDate(sort: Desc)])
-  @@index([serviceCenterId])
-  @@map("service_history")
-}
-
-// ============================================
-// JOB CARDS
-// ============================================
-
-model JobCard {
-  id            String      @id @default(uuid())
-  jobNumber     String      @unique
-  serviceCenterId String
-  vehicleId     String
-  customerId    String
-  
-  serviceType   String
-  description   String?
-  status        String      @default("created") // created, approved, assigned, in_progress, completed, invoiced, delivered
-  
-  assignedEngineerId String?
-  estimatedCost Decimal?
-  actualCost    Decimal?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  completedAt   DateTime?
-  
-  serviceCenter ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  vehicle       Vehicle     @relation(fields: [vehicleId], references: [id])
-  
-  @@index([serviceCenterId])
-  @@index([status])
-  @@index([assignedEngineerId])
-  @@map("job_cards")
-}
-
-// ============================================
-// INVENTORY
-// ============================================
-
-model Part {
-  id            String      @id @default(uuid())
-  sku           String      @unique
-  name          String
-  description   String?
-  category      String?
-  manufacturer  String?
-  unitPrice     Decimal     @default(0)
-  supplier      String?
-  reorderLevel  Int         @default(0)
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  inventory     Inventory[]
-  transferItems StockTransferItem[]
-  
-  @@index([sku])
-  @@index([category])
-  @@map("parts")
-}
-
-model Inventory {
-  id            String      @id @default(uuid())
-  serviceCenterId String
-  partId        String
-  quantity      Int         @default(0)
-  minLevel      Int         @default(0)
-  maxLevel      Int?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  serviceCenter ServiceCenter @relation(fields: [serviceCenterId], references: [id], onDelete: Cascade)
-  part          Part        @relation(fields: [partId], references: [id], onDelete: Cascade)
-  
-  @@unique([serviceCenterId, partId])
-  @@index([serviceCenterId])
-  @@index([partId])
-  @@map("inventory")
-}
-
-model StockTransfer {
-  id            String      @id @default(uuid())
-  transferNumber String     @unique
-  fromServiceCenterId String?
-  toServiceCenterId String
-  status        String      @default("pending") // pending, approved, in_transit, received, rejected
-  requestedBy   String?
-  approvedBy    String?
-  approvedAt    DateTime?
-  receivedAt    DateTime?
-  notes         String?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  serviceCenter ServiceCenter @relation(fields: [toServiceCenterId], references: [id])
-  items         StockTransferItem[]
-  approval      Approval? @relation
-  
-  @@index([status])
-  @@index([toServiceCenterId])
-  @@map("stock_transfers")
-}
-
-model StockTransferItem {
-  id            String      @id @default(uuid())
-  transferId    String
-  partId        String
-  quantity      Int
-  receivedQuantity Int?     @default(0)
-  
-  transfer      StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  part          Part        @relation(fields: [partId], references: [id])
-  
-  @@index([transferId])
-  @@map("stock_transfer_items")
-}
-
-// ============================================
-// APPROVALS
-// ============================================
-
-model Approval {
-  id            String      @id @default(uuid())
-  type          ApprovalType
-  status        ApprovalStatus @default(PENDING)
-  entityType    String      // e.g., "ServiceRequest", "StockTransfer"
-  entityId      String
-  stockTransferId String?   @unique // Optional foreign key for StockTransfer
-  requestedBy   String?
-  approvedBy    String?
-  approvedAt    DateTime?
-  rejectedBy    String?
-  rejectedAt    DateTime?
-  comments      String?
-  rejectionReason String?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  stockTransfer StockTransfer? @relation(fields: [stockTransferId], references: [id], onDelete: Cascade)
-  
-  @@index([type, status])
-  @@index([entityType, entityId])
-  @@index([requestedBy])
-  @@index([stockTransferId])
-  @@map("approvals")
-}
-
-// ============================================
-// INVOICING & PAYMENTS
-// ============================================
-
-model Invoice {
-  id            String      @id @default(uuid())
-  invoiceNumber String      @unique
-  serviceCenterId String
-  customerId    String
-  jobCardId     String?
-  
-  subtotal      Decimal     @default(0)
-  tax           Decimal     @default(0)
-  discount      Decimal     @default(0)
-  totalAmount   Decimal     @default(0)
-  paidAmount    Decimal     @default(0)
-  status        InvoiceStatus @default(UNPAID)
-  
-  dueDate       DateTime?
-  paidAt        DateTime?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  serviceCenter ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  customer      Customer    @relation(fields: [customerId], references: [id])
-  payments      Payment[]
-  
-  @@index([serviceCenterId])
-  @@index([status])
-  @@index([invoiceNumber])
-  @@map("invoices")
-}
-
-model Payment {
-  id            String      @id @default(uuid())
-  invoiceId     String
-  amount        Decimal
-  method        PaymentMethod
-  reference     String?
-  notes         String?
-  
-  createdAt     DateTime    @default(now())
-  
-  invoice       Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  
   @@index([invoiceId])
-  @@map("payments")
 }
 
-// ============================================
-// COMPLAINTS
-// ============================================
-
-model Complaint {
-  id            String      @id @default(uuid())
-  complaintNumber String    @unique
-  serviceCenterId String?
-  customerId    String
-  jobCardId     String?
-  
-  title         String
-  description   String
-  severity      ComplaintSeverity @default(MEDIUM)
-  status        ComplaintStatus @default(OPEN)
-  
-  assignedTo    String?     // User ID
-  resolvedBy    String?
-  resolvedAt    DateTime?
-  resolution    String?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  
-  serviceCenter ServiceCenter? @relation(fields: [serviceCenterId], references: [id], onDelete: SetNull)
-  customer      Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  
-  @@index([status])
-  @@index([severity])
-  @@index([serviceCenterId])
-  @@index([assignedTo])
-  @@map("complaints")
-}
-
-// ============================================
-// SYSTEM CONFIGURATION
-// ============================================
-
-model SystemConfig {
-  id            String      @id @default(uuid())
-  key           String      @unique
-  value         String
-  description   String?
-  category      String?     // e.g., "email", "sms", "business_rules", "security"
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  updatedBy     String?
-  
-  @@index([key])
-  @@index([category])
-  @@map("system_config")
+// Files
+model File {
+  id                String   @id @default(uuid())
+  url               String
+  filename          String
+  category          String
+  relatedEntityId   String
+  relatedEntityType String
+  createdAt         DateTime @default(now())
 }

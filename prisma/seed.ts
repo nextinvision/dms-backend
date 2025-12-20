@@ -1,119 +1,309 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole, JobCardStatus, AppointmentStatus, AppointmentLocation, VehicleStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Starting seed...');
+  console.log('Seed starting...');
 
-  // Create Super Admin user
-  const saltRounds = 12;
-  const hashedPassword = await bcrypt.hash('admin123', saltRounds);
+  const hashedPassword = await bcrypt.hash('admin123', 10);
 
-  const superAdmin = await prisma.user.upsert({
+  // 1. Service Centers
+  const sc1 = await prisma.serviceCenter.upsert({
+    where: { code: 'SC001' },
+    update: {},
+    create: {
+      name: 'Main Metro Service Center',
+      code: 'SC001',
+      address: '123 Metro Plaza, Mumbai',
+      phone: '022-1234567',
+      email: 'mumbai@dms.com',
+      city: 'Mumbai',
+      state: 'Maharashtra'
+    },
+  });
+
+  await prisma.serviceCenter.upsert({
+    where: { code: 'SC002' },
+    update: {},
+    create: {
+      name: 'South Zone Service Hub',
+      code: 'SC002',
+      address: '45 Tech Road, Bangalore',
+      phone: '080-7654321',
+      email: 'bangalore@dms.com',
+      city: 'Bangalore',
+      state: 'Karnataka'
+    },
+  });
+
+  // 2. Users
+  await prisma.user.upsert({
     where: { email: 'admin@dms.com' },
     update: {},
     create: {
       email: 'admin@dms.com',
       password: hashedPassword,
-      firstName: 'Super',
-      lastName: 'Admin',
-      role: 'SUPER_ADMIN',
-      status: 'ACTIVE',
+      name: 'System Administrator',
+      role: UserRole.admin,
+      phone: '9999999999'
     },
   });
 
-  console.log('Created Super Admin:', superAdmin.email);
-
-  // Create a sample Service Center
-  const serviceCenter = await prisma.serviceCenter.upsert({
-    where: { code: 'SC001' },
+  const scManager = await prisma.user.upsert({
+    where: { email: 'manager@sc001.com' },
     update: {},
     create: {
-      name: 'Main Service Center',
-      code: 'SC001',
-      address: '123 Main Street',
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      pincode: '400001',
-      phone: '+91-1234567890',
-      email: 'sc001@dms.com',
-      status: 'ACTIVE',
-      capacity: 50,
-      technicianCount: 10,
-      serviceRadius: 25.0,
-      homeServiceEnabled: true,
-      invoicePrefix: 'SC001-INV-',
-      gstNumber: '27AAAAA0000A1Z5',
-      serviceTypes: ['Routine Maintenance', 'Repair', 'Inspection'],
-      createdBy: superAdmin.id,
+      email: 'manager@sc001.com',
+      password: hashedPassword,
+      name: 'Mumbai Manager',
+      role: UserRole.sc_manager,
+      serviceCenterId: sc1.id,
+      phone: '9888888888'
     },
   });
 
-  console.log('Created Service Center:', serviceCenter.name);
-
-  // Create sample parts
-  const parts = [
-    {
-      sku: 'PART001',
-      name: 'Engine Oil Filter',
-      category: 'Filters',
-      manufacturer: 'ABC Motors',
-      unitPrice: 500.0,
-      supplier: 'XYZ Suppliers',
-      reorderLevel: 10,
+  const engineer = await prisma.user.upsert({
+    where: { email: 'engineer@sc001.com' },
+    update: {},
+    create: {
+      email: 'engineer@sc001.com',
+      password: hashedPassword,
+      name: 'Lead Mechanic',
+      role: UserRole.service_engineer,
+      serviceCenterId: sc1.id,
+      phone: '9777777777'
     },
-    {
-      sku: 'PART002',
-      name: 'Brake Pads',
-      category: 'Brakes',
-      manufacturer: 'DEF Brakes',
-      unitPrice: 1500.0,
-      supplier: 'XYZ Suppliers',
-      reorderLevel: 5,
-    },
-    {
-      sku: 'PART003',
-      name: 'Air Filter',
-      category: 'Filters',
-      manufacturer: 'ABC Motors',
-      unitPrice: 300.0,
-      supplier: 'XYZ Suppliers',
-      reorderLevel: 15,
-    },
-  ];
+  });
 
-  for (const part of parts) {
-    await prisma.part.upsert({
-      where: { sku: part.sku },
-      update: {},
-      create: part,
-    });
-    console.log(`Created part: ${part.name}`);
-  }
+  // 3. Customers
+  const customer = await prisma.customer.create({
+    data: {
+      customerNumber: 'CUST-' + Date.now() + Math.floor(Math.random() * 1000),
+      name: 'Rahul Sharma',
+      phone: '9123456780',
+      email: 'rahul@example.com',
+      address: 'Apt 402, Sea View Society',
+      cityState: 'Mumbai, MH',
+    }
+  });
 
-  // Create inventory for service center
-  const createdParts = await prisma.part.findMany();
-  for (const part of createdParts) {
-    await prisma.inventory.upsert({
-      where: {
-        serviceCenterId_partId: {
-          serviceCenterId: serviceCenter.id,
-          partId: part.id,
-        },
+  // 3.1 Vehicle
+  const vehicle = await prisma.vehicle.create({
+    data: {
+      customerId: customer.id,
+      registration: 'MH01AB' + Math.floor(Math.random() * 100000),
+      vin: 'VIN' + Date.now() + Math.floor(Math.random() * 1000),
+      vehicleMake: 'Tata',
+      vehicleModel: 'Nexon EV',
+      vehicleYear: 2023,
+      currentStatus: VehicleStatus.AVAILABLE,
+      lastServiceCenterId: sc1.id
+    }
+  });
+
+  const vehicleId = vehicle.id;
+
+  // 4. Central Inventory
+  const centralPart = await prisma.centralInventory.upsert({
+    where: { partNumber: 'BATT-NEX-001' },
+    update: {},
+    create: {
+      partName: 'Li-ion Battery Pack 40kWh',
+      partNumber: 'BATT-NEX-001',
+      category: 'PARTS',
+      stockQuantity: 50,
+      unitPrice: 500000,
+      costPrice: 400000,
+      gstRate: 18,
+      minStockLevel: 5,
+      available: 50
+    }
+  });
+
+  // 5. SC Inventory
+  const scPart = await prisma.inventory.create({
+    data: {
+      serviceCenterId: sc1.id,
+      partName: 'Brake Pad Set',
+      partNumber: 'BRK-001',
+      category: 'PARTS',
+      stockQuantity: 20,
+      unitPrice: 2500,
+      costPrice: 1800,
+      gstRate: 18,
+      minStockLevel: 5,
+      maxStockLevel: 50
+    }
+  });
+
+  // 6. Appointment
+  await prisma.appointment.create({
+    data: {
+      appointmentNumber: 'APT-' + Date.now() + Math.floor(Math.random() * 1000),
+      customerId: customer.id,
+      vehicleId: vehicleId,
+      serviceCenterId: sc1.id,
+      serviceType: 'Annual Maintenance',
+      appointmentDate: new Date(),
+      appointmentTime: '10:00 AM',
+      status: AppointmentStatus.PENDING,
+      location: AppointmentLocation.STATION
+    }
+  });
+
+  // 7. Job Card
+  const jobCard = await prisma.jobCard.create({
+    data: {
+      jobCardNumber: 'JC-MUM-' + Date.now() + Math.floor(Math.random() * 1000),
+      serviceCenterId: sc1.id,
+      customerId: customer.id,
+      vehicleId: vehicleId,
+      assignedEngineerId: engineer.id,
+      serviceType: 'Initial Inspection',
+      status: JobCardStatus.ASSIGNED,
+    }
+  });
+
+  await prisma.jobCardItem.createMany({
+    data: [
+      {
+        jobCardId: jobCard.id,
+        srNo: 1,
+        itemType: 'part',
+        partName: 'Brake Pad Set',
+        partCode: 'BRK-001',
+        qty: 1,
+        amount: 2500,
+        isWarranty: false
       },
-      update: {},
-      create: {
-        serviceCenterId: serviceCenter.id,
-        partId: part.id,
-        quantity: 20,
-        minLevel: 10,
-        maxLevel: 100,
-      },
-    });
-  }
+      {
+        jobCardId: jobCard.id,
+        srNo: 2,
+        itemType: 'work_item',
+        partName: 'Labour - Cleaning',
+        partCode: 'LBR-01',
+        qty: 1,
+        amount: 500,
+        isWarranty: false
+      }
+    ]
+  });
 
-  console.log('Created inventory items');
+  // 8. Parts Request
+  await prisma.partsRequest.create({
+    data: {
+      jobCardId: jobCard.id,
+      status: 'PENDING',
+      urgency: 'MEDIUM',
+      items: {
+        create: {
+          inventoryPartId: scPart.id,
+          requestedQty: 1
+        }
+      }
+    }
+  });
+
+  // 9. Quotation
+  await prisma.quotation.create({
+    data: {
+      quotationNumber: 'QT-MUM-' + Date.now() + Math.floor(Math.random() * 1000),
+      serviceCenterId: sc1.id,
+      customerId: customer.id,
+      vehicleId: vehicleId,
+      status: 'DRAFT',
+      subtotal: 2500,
+      cgst: 225,
+      sgst: 225,
+      totalAmount: 2950,
+      items: {
+        create: [
+          {
+            partName: 'Brake Pad Set',
+            partNumber: 'BRK-001',
+            quantity: 1,
+            rate: 2500,
+            gstPercent: 18
+          }
+        ]
+      }
+    }
+  });
+
+  // 10. Invoice
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-MUM-' + Date.now() + Math.floor(Math.random() * 1000),
+      serviceCenterId: sc1.id,
+      customerId: customer.id,
+      vehicleId: vehicleId,
+      jobCardId: jobCard.id,
+      status: 'UNPAID',
+      subtotal: 2500,
+      cgst: 225,
+      sgst: 225,
+      grandTotal: 2950,
+      items: {
+        create: [
+          {
+            name: 'Brake Pad Set',
+            quantity: 1,
+            unitPrice: 2500,
+            gstRate: 18
+          }
+        ]
+      }
+    }
+  });
+
+  // 11. Supplier
+  const supplier = await prisma.supplier.create({
+    data: {
+      name: 'AutoParts India Pvt Ltd ' + Date.now(),
+      contactPerson: 'Amit Gupta',
+      email: 'amit' + Date.now() + '@autoparts.com',
+      phone: '9876543210'
+    }
+  });
+
+  // 12. Purchase Order
+  await prisma.purchaseOrder.create({
+    data: {
+      poNumber: 'PO-MUM-' + Date.now() + Math.floor(Math.random() * 1000),
+      supplierId: supplier.id,
+      status: 'DRAFT',
+      orderDate: new Date(),
+      subtotal: 18000,
+      cgst: 1620,
+      sgst: 1620,
+      totalAmount: 21240,
+      items: {
+        create: {
+          centralInventoryPartId: centralPart.id,
+          quantity: 10,
+          unitPrice: 1800,
+          gstRate: 18
+        }
+      }
+    }
+  });
+
+  // 13. Parts Issue
+  await prisma.partsIssue.create({
+    data: {
+      issueNumber: 'PI-MUM-' + Date.now() + Math.floor(Math.random() * 1000),
+      toServiceCenterId: sc1.id,
+      requestedById: scManager.id,
+      status: 'PENDING_APPROVAL',
+      items: {
+        create: {
+          centralInventoryPartId: centralPart.id,
+          requestedQty: 5
+        }
+      }
+    }
+  });
 
   console.log('Seed completed successfully!');
 }
@@ -126,4 +316,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

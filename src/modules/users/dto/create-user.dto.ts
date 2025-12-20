@@ -1,48 +1,29 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsEmail,
-  IsEnum,
-  IsOptional,
-  IsArray,
-  MinLength,
-  IsPhoneNumber,
-} from 'class-validator';
-import { UserRole, UserStatus } from '@prisma/client';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { UserRole } from '@prisma/client';
 
 export class CreateUserDto {
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
+    @IsEmail()
+    @IsNotEmpty()
+    email: string;
 
-  @IsString()
-  @IsOptional()
-  phone?: string;
+    @IsString()
+    @IsNotEmpty()
+    @MinLength(6)
+    password: string;
 
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(6)
-  password: string;
+    @IsString()
+    @IsNotEmpty()
+    name: string;
 
-  @IsString()
-  @IsNotEmpty()
-  firstName: string;
+    @IsEnum(UserRole)
+    @IsNotEmpty()
+    role: UserRole;
 
-  @IsString()
-  @IsOptional()
-  lastName?: string;
+    @IsUUID()
+    @IsOptional()
+    serviceCenterId?: string;
 
-  @IsEnum(UserRole)
-  @IsNotEmpty()
-  role: UserRole;
-
-  @IsEnum(UserStatus)
-  @IsOptional()
-  status?: UserStatus;
-
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  serviceCenterIds?: string[];
+    @IsString()
+    @IsOptional()
+    phone?: string;
 }
-
