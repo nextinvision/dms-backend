@@ -22,7 +22,7 @@ export class JobCardsController {
     constructor(private readonly jobCardsService: JobCardsService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'service_advisor')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
     create(@Body() createJobCardDto: CreateJobCardDto) {
         return this.jobCardsService.create(createJobCardDto);
     }

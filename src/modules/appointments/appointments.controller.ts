@@ -22,25 +22,25 @@ export class AppointmentsController {
     constructor(private readonly appointmentsService: AppointmentsService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
     create(@Body() createAppointmentDto: CreateAppointmentDto) {
         return this.appointmentsService.create(createAppointmentDto);
     }
 
     @Get()
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
     findAll(@Query() query: any) {
         return this.appointmentsService.findAll(query);
     }
 
     @Get(':id')
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
     findOne(@Param('id') id: string) {
         return this.appointmentsService.findOne(id);
     }
 
     @Patch(':id')
-    @Roles('admin', 'sc_manager', 'service_advisor')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'call_center')
     update(@Param('id') id: string, @Body() updateAppointmentDto: UpdateAppointmentDto) {
         return this.appointmentsService.update(id, updateAppointmentDto);
     }

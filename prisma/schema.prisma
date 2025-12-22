@@ -53,6 +53,7 @@ enum UserRole {
   sc_manager
   service_engineer
   service_advisor
+  call_center
   inventory_manager
   central_inventory_manager
 }

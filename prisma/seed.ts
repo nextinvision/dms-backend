@@ -76,6 +76,57 @@ async function main() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { email: 'advisor@sc001.com' },
+    update: {},
+    create: {
+      email: 'advisor@sc001.com',
+      password: hashedPassword,
+      name: 'Service Advisor',
+      role: UserRole.service_advisor,
+      serviceCenterId: sc1.id,
+      phone: '9666666666'
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'callcenter@sc001.com' },
+    update: {},
+    create: {
+      email: 'callcenter@sc001.com',
+      password: hashedPassword,
+      name: 'Call Center Agent',
+      role: UserRole.call_center,
+      serviceCenterId: sc1.id,
+      phone: '9600000000'
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'inventory@sc001.com' },
+    update: {},
+    create: {
+      email: 'inventory@sc001.com',
+      password: hashedPassword,
+      name: 'SC Inventory Manager',
+      role: UserRole.inventory_manager,
+      serviceCenterId: sc1.id,
+      phone: '9555555555'
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'central-inventory@dms.com' },
+    update: {},
+    create: {
+      email: 'central-inventory@dms.com',
+      password: hashedPassword,
+      name: 'Central Inventory Manager',
+      role: UserRole.central_inventory_manager,
+      phone: '9444444444'
+    },
+  });
+
   // 3. Customers
   const customer = await prisma.customer.create({
     data: {
