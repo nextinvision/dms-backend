@@ -1,0 +1,129 @@
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
+import { CreateFileDto } from './dto/create-file.dto';
+import { v2 as cloudinary } from 'cloudinary';
+
+@Injectable()
+export class FilesService {
+  constructor(private prisma: PrismaService) {
+    // Initialize Cloudinary
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+  }
+
+  async createFileMetadata(createFileDto: CreateFileDto) {
+    try {
+      return await this.prisma.file.create({
+        data: {
+          url: createFileDto.url,
+          publicId: createFileDto.publicId,
+          filename: createFileDto.filename,
+          format: createFileDto.format,
+          bytes: createFileDto.bytes,
+          width: createFileDto.width,
+          height: createFileDto.height,
+          duration: createFileDto.duration,
+          category: createFileDto.category,
+          relatedEntityId: createFileDto.relatedEntityId,
+          relatedEntityType: createFileDto.relatedEntityType,
+          uploadedBy: createFileDto.uploadedBy,
+          metadata: createFileDto.metadata || {},
+        },
+      });
+    } catch (error) {
+      if (error.code === 'P2002') {
+        // Unique constraint violation (publicId already exists)
+        throw new BadRequestException('File with this public ID already exists');
+      }
+      throw error;
+    }
+  }
+
+  async createMultipleFiles(createFileDtos: CreateFileDto[]) {
+    return Promise.all(
+      createFileDtos.map((dto) => this.createFileMetadata(dto))
+    );
+  }
+
+  async getFiles(
+    entityType: string,
+    entityId: string,
+    category?: string,
+  ) {
+    const where: any = {
+      relatedEntityType: entityType,
+      relatedEntityId: entityId,
+    };
+
+    if (category) {
+      where.category = category;
+    }
+
+    return this.prisma.file.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getFileById(id: string) {
+    const file = await this.prisma.file.findUnique({
+      where: { id },
+    });
+
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    return file;
+  }
+
+  async deleteFile(id: string) {
+    const file = await this.getFileById(id);
+
+    try {
+      // Delete from Cloudinary
+      if (file.publicId) {
+        await cloudinary.uploader.destroy(file.publicId);
+      }
+    } catch (error) {
+      console.error('Error deleting file from Cloudinary:', error);
+      // Continue with database deletion even if Cloudinary deletion fails
+    }
+
+    // Delete from database
+    await this.prisma.file.delete({
+      where: { id },
+    });
+
+    return { message: 'File deleted successfully' };
+  }
+
+  async deleteFilesByEntity(entityType: string, entityId: string) {
+    const files = await this.getFiles(entityType, entityId);
+
+    // Delete all files from Cloudinary and database
+    await Promise.all(
+      files.map((file) => this.deleteFile(file.id))
+    );
+
+    return { message: `${files.length} file(s) deleted successfully` };
+  }
+
+  async deleteFilesByCategory(
+    entityType: string,
+    entityId: string,
+    category: string,
+  ) {
+    const files = await this.getFiles(entityType, entityId, category);
+
+    await Promise.all(
+      files.map((file) => this.deleteFile(file.id))
+    );
+
+    return { message: `${files.length} file(s) deleted successfully` };
+  }
+}
+

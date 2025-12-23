@@ -14,6 +14,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ServiceCentersModule } from './modules/service-centers/service-centers.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { FilesModule } from './modules/files/files.module';
 import { TenantIsolationMiddleware } from './common/middleware/tenant.middleware';
 
 @Module({
@@ -33,6 +34,7 @@ import { TenantIsolationMiddleware } from './common/middleware/tenant.middleware
     ServiceCentersModule,
     UsersModule,
     AuthModule,
+    FilesModule,
   ],
   controllers: [],
   providers: [],

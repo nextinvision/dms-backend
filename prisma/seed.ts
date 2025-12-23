@@ -96,7 +96,7 @@ async function main() {
       email: 'callcenter@sc001.com',
       password: hashedPassword,
       name: 'Call Center Agent',
-      role: UserRole.call_center,
+      role: 'call_center' as UserRole,
       serviceCenterId: sc1.id,
       phone: '9600000000'
     },

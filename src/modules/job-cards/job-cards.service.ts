@@ -3,10 +3,15 @@ import { PrismaService } from '../../database/prisma.service';
 import { CreateJobCardDto } from './dto/create-job-card.dto';
 import { AssignEngineerDto } from './dto/assign-engineer.dto';
 import { UpdateJobCardStatusDto } from './dto/update-status.dto';
+import { FilesService } from '../files/files.service';
+import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
 
 @Injectable()
 export class JobCardsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private filesService: FilesService,
+    ) { }
 
     async create(createJobCardDto: CreateJobCardDto) {
         const { serviceCenterId, vehicleId } = createJobCardDto;
@@ -39,13 +44,21 @@ export class JobCardsService {
 
         const jobCardNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
+        const { part2AData, uploadedBy, ...jobCardData } = createJobCardDto;
+
         // Create Job Card in transaction
-        return this.prisma.$transaction(async (tx) => {
-            const jobCard = await tx.jobCard.create({
+        const jobCard = await this.prisma.$transaction(async (tx) => {
+            const card = await tx.jobCard.create({
                 data: {
-                    ...createJobCardDto,
+                    ...jobCardData,
                     jobCardNumber,
                     status: 'CREATED',
+                    part2AData: part2AData ? {
+                        issueDescription: part2AData.issueDescription,
+                        numberOfObservations: part2AData.numberOfObservations,
+                        symptom: part2AData.symptom,
+                        defectPart: part2AData.defectPart,
+                    } : undefined,
                 },
             });
 
@@ -54,12 +67,86 @@ export class JobCardsService {
                 where: { id: vehicleId },
                 data: {
                     currentStatus: 'ACTIVE_JOB_CARD',
-                    activeJobCardId: jobCard.id,
+                    activeJobCardId: card.id,
                 },
             });
 
-            return jobCard;
+            return card;
         });
+
+        // Save warranty documentation file metadata if provided
+        if (part2AData?.files) {
+            const fileDtos = [];
+
+            if (part2AData.files.videoEvidence) {
+                fileDtos.push(...part2AData.files.videoEvidence.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    duration: file.duration,
+                    category: FileCategory.WARRANTY_VIDEO,
+                    relatedEntityId: jobCard.id,
+                    relatedEntityType: RelatedEntityType.JOB_CARD,
+                    uploadedBy,
+                })));
+            }
+
+            if (part2AData.files.vinImage) {
+                fileDtos.push(...part2AData.files.vinImage.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.WARRANTY_VIN,
+                    relatedEntityId: jobCard.id,
+                    relatedEntityType: RelatedEntityType.JOB_CARD,
+                    uploadedBy,
+                })));
+            }
+
+            if (part2AData.files.odoImage) {
+                fileDtos.push(...part2AData.files.odoImage.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.WARRANTY_ODO,
+                    relatedEntityId: jobCard.id,
+                    relatedEntityType: RelatedEntityType.JOB_CARD,
+                    uploadedBy,
+                })));
+            }
+
+            if (part2AData.files.damageImages) {
+                fileDtos.push(...part2AData.files.damageImages.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.WARRANTY_DAMAGE,
+                    relatedEntityId: jobCard.id,
+                    relatedEntityType: RelatedEntityType.JOB_CARD,
+                    uploadedBy,
+                })));
+            }
+
+            if (fileDtos.length > 0) {
+                await this.filesService.createMultipleFiles(fileDtos);
+            }
+        }
+
+        return jobCard;
     }
 
     async assignEngineer(id: string, assignEngineerDto: AssignEngineerDto) {
@@ -138,6 +225,16 @@ export class JobCardsService {
         });
 
         if (!jobCard) throw new NotFoundException('Job Card not found');
-        return jobCard;
+
+        // Fetch associated files
+        const files = await this.filesService.getFiles(
+            RelatedEntityType.JOB_CARD,
+            id,
+        );
+
+        return {
+            ...jobCard,
+            files,
+        };
     }
 }

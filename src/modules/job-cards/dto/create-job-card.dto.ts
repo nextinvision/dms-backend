@@ -1,5 +1,76 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, IsObject } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, IsObject, IsArray } from 'class-validator';
 import { JobCardPriority, AppointmentLocation } from '@prisma/client';
+
+export class WarrantyDocumentationFilesDto {
+    @IsArray()
+    @IsOptional()
+    videoEvidence?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        duration?: number;
+    }>;
+
+    @IsArray()
+    @IsOptional()
+    vinImage?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+    }>;
+
+    @IsArray()
+    @IsOptional()
+    odoImage?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+    }>;
+
+    @IsArray()
+    @IsOptional()
+    damageImages?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+    }>;
+}
+
+export class Part2ADataDto {
+    @IsString()
+    @IsOptional()
+    issueDescription?: string;
+
+    @IsString()
+    @IsOptional()
+    numberOfObservations?: string;
+
+    @IsString()
+    @IsOptional()
+    symptom?: string;
+
+    @IsString()
+    @IsOptional()
+    defectPart?: string;
+
+    @IsObject()
+    @IsOptional()
+    files?: WarrantyDocumentationFilesDto;
+}
 
 export class CreateJobCardDto {
     @IsUUID()
@@ -33,4 +104,12 @@ export class CreateJobCardDto {
     @IsObject()
     @IsOptional()
     part1Data?: any;
+
+    @IsObject()
+    @IsOptional()
+    part2AData?: Part2ADataDto;
+
+    @IsString()
+    @IsOptional()
+    uploadedBy?: string; // User ID who uploaded the files
 }

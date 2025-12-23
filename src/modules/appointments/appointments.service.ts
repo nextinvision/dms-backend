@@ -2,10 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { FilesService } from '../files/files.service';
+import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
 
 @Injectable()
 export class AppointmentsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private filesService: FilesService,
+    ) { }
 
     async create(createAppointmentDto: CreateAppointmentDto) {
         // Generate appointment number: APT-YYYY-MM-XXXX
@@ -29,13 +34,92 @@ export class AppointmentsService {
 
         const appointmentNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
-        return this.prisma.appointment.create({
+        const { documentationFiles, uploadedBy, ...appointmentData } = createAppointmentDto;
+
+        // Create appointment
+        const appointment = await this.prisma.appointment.create({
             data: {
-                ...createAppointmentDto,
+                ...appointmentData,
                 appointmentNumber,
                 appointmentDate: new Date(createAppointmentDto.appointmentDate),
             },
         });
+
+        // Save file metadata if provided
+        if (documentationFiles) {
+            const fileDtos = [];
+
+            if (documentationFiles.customerIdProof) {
+                fileDtos.push(...documentationFiles.customerIdProof.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.CUSTOMER_ID_PROOF,
+                    relatedEntityId: appointment.id,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+            }
+
+            if (documentationFiles.vehicleRCCopy) {
+                fileDtos.push(...documentationFiles.vehicleRCCopy.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.VEHICLE_RC,
+                    relatedEntityId: appointment.id,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+            }
+
+            if (documentationFiles.warrantyCardServiceBook) {
+                fileDtos.push(...documentationFiles.warrantyCardServiceBook.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.WARRANTY_CARD,
+                    relatedEntityId: appointment.id,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+            }
+
+            if (documentationFiles.photosVideos) {
+                fileDtos.push(...documentationFiles.photosVideos.map(file => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    duration: file.duration,
+                    category: FileCategory.PHOTOS_VIDEOS,
+                    relatedEntityId: appointment.id,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+            }
+
+            if (fileDtos.length > 0) {
+                await this.filesService.createMultipleFiles(fileDtos);
+            }
+        }
+
+        return appointment;
     }
 
     async findAll(query: any) {
@@ -88,7 +172,16 @@ export class AppointmentsService {
             throw new NotFoundException('Appointment not found');
         }
 
-        return appointment;
+        // Fetch associated files
+        const files = await this.filesService.getFiles(
+            RelatedEntityType.APPOINTMENT,
+            id,
+        );
+
+        return {
+            ...appointment,
+            files,
+        };
     }
 
     async update(id: string, updateAppointmentDto: UpdateAppointmentDto) {

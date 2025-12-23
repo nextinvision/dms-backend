@@ -513,10 +513,22 @@ model InvoiceItem {
 // Files
 model File {
   id                String   @id @default(uuid())
-  url               String
+  url               String   // Cloudinary secure URL
+  publicId          String   @unique // Cloudinary public ID (for deletion)
   filename          String
-  category          String
+  format            String   // jpg, png, pdf, mp4, etc.
+  bytes             Int      // File size in bytes
+  width             Int?     // Image width (if image)
+  height            Int?     // Image height (if image)
+  duration          Int?     // Video duration in seconds (if video)
+  category          String   // customer_id_proof, vehicle_rc, warranty_video, etc.
   relatedEntityId   String
-  relatedEntityType String
+  relatedEntityType String   // appointment, job_card, vehicle, customer
+  uploadedBy        String?  // User ID
+  metadata          Json?    // Additional Cloudinary metadata
   createdAt         DateTime @default(now())
+  
+  @@index([relatedEntityId, relatedEntityType])
+  @@index([category])
+  @@index([publicId])
 }

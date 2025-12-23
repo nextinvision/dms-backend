@@ -1,5 +1,56 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, IsDateString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, IsDateString, IsObject, IsArray } from 'class-validator';
 import { AppointmentLocation } from '@prisma/client';
+
+export class DocumentationFilesDto {
+    @IsArray()
+    @IsOptional()
+    customerIdProof?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+    }>;
+
+    @IsArray()
+    @IsOptional()
+    vehicleRCCopy?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+    }>;
+
+    @IsArray()
+    @IsOptional()
+    warrantyCardServiceBook?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+    }>;
+
+    @IsArray()
+    @IsOptional()
+    photosVideos?: Array<{
+        url: string;
+        publicId: string;
+        filename: string;
+        format: string;
+        bytes: number;
+        width?: number;
+        height?: number;
+        duration?: number;
+    }>;
+}
 
 export class CreateAppointmentDto {
     @IsUUID()
@@ -37,4 +88,12 @@ export class CreateAppointmentDto {
     @IsNumber()
     @IsOptional()
     estimatedCost?: number;
+
+    @IsObject()
+    @IsOptional()
+    documentationFiles?: DocumentationFilesDto;
+
+    @IsString()
+    @IsOptional()
+    uploadedBy?: string; // User ID who uploaded the files
 }
