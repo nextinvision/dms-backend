@@ -65,6 +65,7 @@ export class CustomersService {
                 take: Number(limit),
                 orderBy: { createdAt: 'desc' },
                 include: {
+                    vehicles: true,
                     _count: {
                         select: { vehicles: true }
                     }
