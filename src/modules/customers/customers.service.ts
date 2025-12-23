@@ -41,7 +41,7 @@ export class CustomersService {
     }
 
     async findAll(query: any) {
-        const { page = 1, limit = 20, search, ...filters } = query;
+        const { page = 1, limit = 20, search, sort, type, ...filters } = query;
         const skip = (page - 1) * limit;
 
         const where: any = {
