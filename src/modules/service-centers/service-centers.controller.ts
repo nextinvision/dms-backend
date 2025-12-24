@@ -25,13 +25,13 @@ export class ServiceCentersController {
     }
 
     @Get()
-    @Roles('admin')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center', 'inventory_manager', 'central_inventory_manager')
     findAll() {
         return this.scService.findAll();
     }
 
     @Get(':id')
-    @Roles('admin', 'sc_manager')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center', 'inventory_manager', 'central_inventory_manager')
     findOne(@Param('id') id: string) {
         return this.scService.findOne(id);
     }

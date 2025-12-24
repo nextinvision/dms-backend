@@ -15,8 +15,31 @@ model ServiceCenter {
   address     String?
   city        String?
   state       String?
+  pinCode     String?
   phone       String?
   email       String?
+
+  // Operational Config
+  capacity                Int?
+  technicianCount         Int?
+  serviceRadius           Decimal?
+  homeServiceEnabled      Boolean  @default(false)
+  maxAppointmentsPerDay   Int?
+
+  // Financial Setup
+  invoicePrefix           String?
+  bankName                String?
+  bankAccount             String?
+  bankIFSC                String?
+  gstNumber               String?
+  panNumber               String?
+
+  // Service Capabilities
+  serviceTypes            String[]
+
+  // Status
+  status                  String   @default("Active")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -84,6 +107,7 @@ model Customer {
   jobCards      JobCard[]
   quotations    Quotation[]
   invoices      Invoice[]
+  files         File[]        @relation("CustomerFiles")
   
   @@index([phone])
   @@index([customerNumber])
@@ -122,6 +146,7 @@ model Vehicle {
   jobCards      JobCard[]
   quotations    Quotation[]
   invoices      Invoice[]
+  files         File[]        @relation("VehicleFiles")
 
   @@index([customerId])
   @@index([registration])
@@ -143,21 +168,72 @@ model Appointment {
   vehicle            Vehicle           @relation(fields: [vehicleId], references: [id])
   serviceCenterId    String
   serviceCenter      ServiceCenter     @relation(fields: [serviceCenterId], references: [id])
+  
+  // Basic Appointment Info
   serviceType        String
   appointmentDate    DateTime
   appointmentTime    String
+  duration           String?           // Estimated duration in hours
+  status             AppointmentStatus @default(PENDING)
+  
+  // Service Details
   customerComplaint  String?
-  location           AppointmentLocation @default(STATION)
+  previousServiceHistory String?
+  estimatedServiceTime String?
   estimatedCost      Decimal?
-  status             AppointmentStatus   @default(PENDING)
+  odometerReading    String?           // Odometer at appointment time (changes over time)
+  estimatedDeliveryDate DateTime?
+  
+  // Location & Pickup/Drop
+  location           AppointmentLocation @default(STATION)
+  pickupDropRequired Boolean           @default(false)
+  pickupAddress      String?
+  pickupState        String?
+  pickupCity         String?
+  pickupPincode      String?
+  dropAddress        String?
+  dropState          String?
+  dropCity           String?
+  dropPincode        String?
+  
+  // Staff Assignment
+  assignedServiceAdvisor String?       // User name or ID
+  assignedTechnician String?           // User name or ID
+  
+  // Communication Preferences
+  preferredCommunicationMode String?   // Phone, Email, SMS, WhatsApp
+  
+  // Job Card Pre-fill Data (observation at appointment time)
+  batterySerialNumber String?
+  mcuSerialNumber    String?
+  vcuSerialNumber    String?
+  otherPartSerialNumber String?
+  technicianObservation String?
+  
+  // Check-in/Arrival Fields
+  arrivalMode        String?           // vehicle_present, vehicle_absent, check_in_only
+  checkInNotes       String?
+  checkInSlipNumber  String?
+  checkInDate        DateTime?
+  checkInTime        String?
+  customerArrived    Boolean           @default(false)
+  
+  // Feedback
+  feedbackRating     Int?              // 1-5 stars
+  
+  // Timestamps
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
-
+  
+  // Relations
   jobCards           JobCard[]
+  files              File[]            @relation("AppointmentFiles")
 
   @@index([serviceCenterId])
   @@index([customerId])
   @@index([vehicleId])
+  @@index([appointmentDate])
+  @@index([status])
 }
 
 enum AppointmentLocation {
@@ -170,6 +246,8 @@ enum AppointmentStatus {
   CONFIRMED
   CANCELLED
   COMPLETED
+  IN_PROGRESS
+  ARRIVED
 }
 
 // JobCard
@@ -200,6 +278,7 @@ model JobCard {
   items         JobCardItem[]
   partsRequests PartsRequest[]
   invoices      Invoice[]
+  files         File[]        @relation("JobCardFiles")
   
   @@index([serviceCenterId, status, createdAt])
   @@index([customerId, createdAt])
@@ -512,23 +591,43 @@ model InvoiceItem {
 
 // Files
 model File {
-  id                String   @id @default(uuid())
-  url               String   // Cloudinary secure URL
-  publicId          String   @unique // Cloudinary public ID (for deletion)
+  id                String      @id @default(uuid())
+  url               String      // Cloudinary secure URL
+  publicId          String      @unique // Cloudinary public ID (for deletion)
   filename          String
-  format            String   // jpg, png, pdf, mp4, etc.
-  bytes             Int      // File size in bytes
-  width             Int?     // Image width (if image)
-  height            Int?     // Image height (if image)
-  duration          Int?     // Video duration in seconds (if video)
-  category          String   // customer_id_proof, vehicle_rc, warranty_video, etc.
+  format            String      // jpg, png, pdf, mp4, etc.
+  bytes             Int         // File size in bytes
+  width             Int?        // Image width (if image)
+  height            Int?        // Image height (if image)
+  duration          Int?        // Video duration in seconds (if video)
+  category          String      // customer_id_proof, vehicle_rc, warranty_video, etc.
+  
+  // Generic relation fields (for flexibility)
   relatedEntityId   String
-  relatedEntityType String   // appointment, job_card, vehicle, customer
-  uploadedBy        String?  // User ID
-  metadata          Json?    // Additional Cloudinary metadata
-  createdAt         DateTime @default(now())
+  relatedEntityType String      // appointment, job_card, vehicle, customer
+  
+  // Specific foreign key relations (optional, based on relatedEntityType)
+  appointmentId     String?
+  appointment       Appointment? @relation("AppointmentFiles", fields: [appointmentId], references: [id], onDelete: Cascade)
+  
+  jobCardId         String?
+  jobCard           JobCard?    @relation("JobCardFiles", fields: [jobCardId], references: [id], onDelete: Cascade)
+  
+  vehicleId         String?
+  vehicle           Vehicle?    @relation("VehicleFiles", fields: [vehicleId], references: [id], onDelete: Cascade)
+  
+  customerId        String?
+  customer          Customer?   @relation("CustomerFiles", fields: [customerId], references: [id], onDelete: Cascade)
+  
+  uploadedBy        String?     // User ID
+  metadata          Json?       // Additional Cloudinary metadata
+  createdAt         DateTime    @default(now())
   
   @@index([relatedEntityId, relatedEntityType])
   @@index([category])
   @@index([publicId])
+  @@index([appointmentId])
+  @@index([jobCardId])
+  @@index([vehicleId])
+  @@index([customerId])
 }

@@ -40,7 +40,7 @@ export class AppointmentsController {
     }
 
     @Patch(':id')
-    @Roles('admin', 'sc_manager', 'service_advisor', 'call_center')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
     update(@Param('id') id: string, @Body() updateAppointmentDto: UpdateAppointmentDto) {
         return this.appointmentsService.update(id, updateAppointmentDto);
     }

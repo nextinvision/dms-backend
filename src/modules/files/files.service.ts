@@ -31,14 +31,22 @@ export class FilesService {
           relatedEntityType: createFileDto.relatedEntityType,
           uploadedBy: createFileDto.uploadedBy,
           metadata: createFileDto.metadata || {},
+
+          // Map foreign keys based on entity type for relation consistency
+          appointmentId: createFileDto.relatedEntityType === 'appointment' ? createFileDto.relatedEntityId : undefined,
+          jobCardId: createFileDto.relatedEntityType === 'job_card' ? createFileDto.relatedEntityId : undefined,
+          vehicleId: createFileDto.relatedEntityType === 'vehicle' ? createFileDto.relatedEntityId : undefined,
+          customerId: createFileDto.relatedEntityType === 'customer' ? createFileDto.relatedEntityId : undefined,
         },
       });
     } catch (error) {
+      console.error('Error in createFileMetadata:', error);
       if (error.code === 'P2002') {
         // Unique constraint violation (publicId already exists)
         throw new BadRequestException('File with this public ID already exists');
       }
-      throw error;
+      // Re-throw with more detail for debugging (in development)
+      throw new BadRequestException(`Database Error: ${error.message}`);
     }
   }
 

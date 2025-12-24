@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, IsDateString, IsObject, IsArray } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, IsDateString, IsObject, IsArray, IsBoolean } from 'class-validator';
 import { AppointmentLocation } from '@prisma/client';
 
 export class DocumentationFilesDto {
@@ -96,4 +96,73 @@ export class CreateAppointmentDto {
     @IsString()
     @IsOptional()
     uploadedBy?: string; // User ID who uploaded the files
+
+    // Operational Details
+    @IsDateString()
+    @IsOptional()
+    estimatedDeliveryDate?: string;
+
+    @IsString()
+    @IsOptional()
+    assignedServiceAdvisor?: string;
+
+    @IsString()
+    @IsOptional()
+    assignedTechnician?: string;
+
+    @IsBoolean()
+    @IsOptional()
+    pickupDropRequired?: boolean;
+
+    @IsString()
+    @IsOptional()
+    pickupAddress?: string;
+
+    @IsString()
+    @IsOptional()
+    pickupState?: string;
+
+    @IsString()
+    @IsOptional()
+    pickupCity?: string;
+
+    @IsString()
+    @IsOptional()
+    pickupPincode?: string;
+
+    @IsString()
+    @IsOptional()
+    dropAddress?: string;
+
+    @IsString()
+    @IsOptional()
+    dropState?: string;
+
+    @IsString()
+    @IsOptional()
+    dropCity?: string;
+
+    @IsString()
+    @IsOptional()
+    dropPincode?: string;
+
+    @IsString()
+    @IsOptional()
+    preferredCommunicationMode?: string;
+
+    @IsString()
+    @IsOptional()
+    previousServiceHistory?: string;
+
+    @IsString()
+    @IsOptional()
+    estimatedServiceTime?: string;
+
+    @IsString()
+    @IsOptional()
+    odometerReading?: string;
+
+    @IsString()
+    @IsOptional()
+    duration?: string;
 }

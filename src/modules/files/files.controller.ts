@@ -9,6 +9,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ParseArrayPipe,
 } from '@nestjs/common';
 import { FilesService } from './files.service';
 import { CreateFileDto } from './dto/create-file.dto';
@@ -17,7 +18,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 @Controller('files')
 @UseGuards(JwtAuthGuard)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
+  constructor(private readonly filesService: FilesService) { }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -27,7 +28,10 @@ export class FilesController {
 
   @Post('bulk')
   @HttpCode(HttpStatus.CREATED)
-  async createMultipleFiles(@Body() createFileDtos: CreateFileDto[]) {
+  async createMultipleFiles(
+    @Body(new ParseArrayPipe({ items: CreateFileDto })) createFileDtos: CreateFileDto[],
+  ) {
+    console.log('Received bulk create request:', JSON.stringify(createFileDtos));
     return this.filesService.createMultipleFiles(createFileDtos);
   }
 

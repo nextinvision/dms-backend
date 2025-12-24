@@ -26,7 +26,7 @@ export class UsersController {
     }
 
     @Get()
-    @Roles('admin', 'sc_manager')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
     findAll(@Query() query: any) {
         return this.usersService.findAll(query);
     }

@@ -24,7 +24,7 @@ export class ServiceCentersService {
         return this.prisma.serviceCenter.findMany({
             include: {
                 _count: {
-                    select: { users: true }
+                    select: { users: true, jobCards: true }
                 }
             }
         });
@@ -33,7 +33,17 @@ export class ServiceCentersService {
     async findOne(id: string) {
         const sc = await this.prisma.serviceCenter.findUnique({
             where: { id },
-            include: { users: true },
+            include: {
+                users: true,
+                _count: {
+                    select: {
+                        users: true,
+                        jobCards: {
+                            where: { status: { not: 'COMPLETED' } }
+                        }
+                    }
+                }
+            },
         });
 
         if (!sc) throw new NotFoundException('Service Center not found');
