@@ -190,7 +190,6 @@ export class JobCardsService {
                 skip: Number(skip),
                 take: Number(limit),
                 include: {
-                    // Include full customer data - single source of truth
                     customer: {
                         select: {
                             id: true,
@@ -200,8 +199,7 @@ export class JobCardsService {
                             alternateNumber: true,
                             email: true,
                             address: true,
-                            city: true,
-                            state: true,
+                            cityState: true,
                             pincode: true,
                             customerType: true,
                         }
@@ -226,14 +224,13 @@ export class JobCardsService {
                             vehicleColor: true,
                         }
                     },
-                    // Include full appointment data - single source of truth
                     appointment: {
                         select: {
                             id: true,
-                            date: true,
-                            time: true,
+                            appointmentDate: true,
+                            appointmentTime: true,
                             serviceType: true,
-                            customerComplaintIssue: true,
+                            customerComplaint: true,
                             previousServiceHistory: true,
                             estimatedServiceTime: true,
                             estimatedCost: true,
