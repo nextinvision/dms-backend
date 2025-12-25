@@ -190,9 +190,80 @@ export class JobCardsService {
                 skip: Number(skip),
                 take: Number(limit),
                 include: {
-                    customer: { select: { name: true, phone: true } },
-                    vehicle: { select: { registration: true, vehicleModel: true } },
-                    assignedEngineer: { select: { name: true } },
+                    // Include full customer data - single source of truth
+                    customer: {
+                        select: {
+                            id: true,
+                            name: true,
+                            phone: true,
+                            whatsappNumber: true,
+                            alternateNumber: true,
+                            email: true,
+                            address: true,
+                            city: true,
+                            state: true,
+                            pincode: true,
+                            customerType: true,
+                        }
+                    },
+                    // Include full vehicle data - single source of truth
+                    vehicle: {
+                        select: {
+                            id: true,
+                            registration: true,
+                            vehicleMake: true,
+                            vehicleModel: true,
+                            vehicleYear: true,
+                            vin: true,
+                            variant: true,
+                            motorNumber: true,
+                            chargerSerialNumber: true,
+                            purchaseDate: true,
+                            warrantyStatus: true,
+                            insuranceStartDate: true,
+                            insuranceEndDate: true,
+                            insuranceCompanyName: true,
+                            vehicleColor: true,
+                        }
+                    },
+                    // Include full appointment data - single source of truth
+                    appointment: {
+                        select: {
+                            id: true,
+                            date: true,
+                            time: true,
+                            serviceType: true,
+                            customerComplaintIssue: true,
+                            previousServiceHistory: true,
+                            estimatedServiceTime: true,
+                            estimatedCost: true,
+                            odometerReading: true,
+                            estimatedDeliveryDate: true,
+                            assignedServiceAdvisor: true,
+                            assignedTechnician: true,
+                            pickupDropRequired: true,
+                            pickupAddress: true,
+                            pickupState: true,
+                            pickupCity: true,
+                            pickupPincode: true,
+                            dropAddress: true,
+                            dropState: true,
+                            dropCity: true,
+                            dropPincode: true,
+                            preferredCommunicationMode: true,
+                            arrivalMode: true,
+                            checkInNotes: true,
+                            checkInSlipNumber: true,
+                            checkInDate: true,
+                            checkInTime: true,
+                        }
+                    },
+                    assignedEngineer: {
+                        select: {
+                            id: true,
+                            name: true,
+                        }
+                    },
                 },
                 orderBy: { createdAt: 'desc' },
             }),
