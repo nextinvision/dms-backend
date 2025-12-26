@@ -23,5 +23,5 @@ export class CreatePartsIssueDto {
 
     @IsEnum(JobCardPriority)
     @IsOptional()
-    priority?: JobCardPriority = JobCardPriority.MEDIUM;
+    priority?: JobCardPriority = JobCardPriority.NORMAL;
 }

@@ -42,4 +42,17 @@ export class QuotationsController {
     approve(@Param('id') id: string) {
         return this.quotationsService.approve(id);
     }
+
+    @Post(':id/pass-to-manager')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    passToManager(@Param('id') id: string, @Body('managerId') managerId: string) {
+        return this.quotationsService.passToManager(id, managerId);
+    }
+
+    @Patch(':id/customer-approval')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    updateCustomerApproval(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
+        return this.quotationsService.updateCustomerApproval(id, data);
+    }
 }
+

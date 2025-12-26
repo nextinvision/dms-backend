@@ -7,7 +7,7 @@ export class QuotationsService {
     constructor(private prisma: PrismaService) { }
 
     async create(createQuotationDto: CreateQuotationDto) {
-        const { serviceCenterId, items, discount = 0 } = createQuotationDto;
+        const { serviceCenterId, items, discount = 0, ...rest } = createQuotationDto;
 
         // Generate Quotation Number: QTN-{YYYY}-{SEQ}
         const year = new Date().getFullYear();
@@ -41,22 +41,53 @@ export class QuotationsService {
 
         return this.prisma.quotation.create({
             data: {
-                ...createQuotationDto,
+                ...rest,
+                serviceCenterId,
                 quotationNumber,
                 subtotal,
                 cgst,
                 sgst,
                 totalAmount,
+                discount,
                 status: 'DRAFT',
                 items: {
                     create: items,
                 },
+                // Handle optional dates
+                quotationDate: rest.quotationDate ? new Date(rest.quotationDate) : new Date(),
+                insuranceStartDate: rest.insuranceStartDate ? new Date(rest.insuranceStartDate) : undefined,
+                insuranceEndDate: rest.insuranceEndDate ? new Date(rest.insuranceEndDate) : undefined,
             },
             include: {
                 items: true,
             },
         });
     }
+
+    async passToManager(id: string, managerId: string) {
+        await this.findOne(id);
+        return this.prisma.quotation.update({
+            where: { id },
+            data: {
+                passedToManager: true,
+                passedToManagerAt: new Date(),
+                managerId,
+            },
+        });
+    }
+
+    async updateCustomerApproval(id: string, data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
+        await this.findOne(id);
+        return this.prisma.quotation.update({
+            where: { id },
+            data: {
+                customerApprovalStatus: data.status,
+                customerRejectionReason: data.reason,
+                customerApprovedAt: new Date(),
+            },
+        });
+    }
+
 
     async findAll(query: any) {
         const { page = 1, limit = 20, serviceCenterId, status, customerId } = query;
@@ -114,7 +145,7 @@ export class QuotationsService {
         await this.findOne(id);
         return this.prisma.quotation.update({
             where: { id },
-            data: { status: 'APPROVED' },
+            data: { status: 'MANAGER_APPROVED' },
         });
     }
 }

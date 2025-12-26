@@ -67,6 +67,8 @@ model User {
 
   jobCards         JobCard[]      @relation("AssignedEngineer")
   requestedIssues  PartsIssue[]   @relation("RequestedBy")
+  managerReviews   JobCard[]      @relation("ManagerReview") 
+
 
   @@index([serviceCenterId])
 }
@@ -209,6 +211,8 @@ model Appointment {
   vcuSerialNumber    String?
   otherPartSerialNumber String?
   technicianObservation String?
+  warrantyStatus      String?
+
   
   // Check-in/Arrival Fields
   arrivalMode        String?           // vehicle_present, vehicle_absent, check_in_only
@@ -238,7 +242,7 @@ model Appointment {
 
 enum AppointmentLocation {
   STATION
-  HOME
+  DOORSTEP
 }
 
 enum AppointmentStatus {
@@ -248,7 +252,10 @@ enum AppointmentStatus {
   COMPLETED
   IN_PROGRESS
   ARRIVED
+  QUOTATION_CREATED
+  SENT_TO_MANAGER
 }
+
 
 // JobCard
 model JobCard {
@@ -264,28 +271,62 @@ model JobCard {
   assignedEngineer   User?         @relation("AssignedEngineer", fields: [assignedEngineerId], references: [id])
   appointmentId      String?
   appointment        Appointment?  @relation(fields: [appointmentId], references: [id])
+  
+  // ✅ NEW: Temp vs Actual Job Card Fields
+  isTemporary        Boolean       @default(true)
+  convertedToFinal   Boolean       @default(false)
+  finalJobCardId     String?
+  finalJobCard       JobCard?      @relation("TempToFinal", fields: [finalJobCardId], references: [id])
+  tempJobCards       JobCard[]     @relation("TempToFinal")
+  
+  // ✅ NEW: Manager Approval Workflow Fields
+  passedToManager    Boolean       @default(false)
+  passedToManagerAt  DateTime?
+  managerId          String?
+  manager            User?         @relation("ManagerReview", fields: [managerId], references: [id])
+  managerReviewStatus String?      // PENDING, APPROVED, REJECTED
+  managerReviewNotes String?
+  managerReviewedAt  DateTime?
+  
+  // ✅ NEW: Lead Integration
+  leadId             String?
+  
   status             JobCardStatus @default(CREATED)
-  priority           JobCardPriority @default(MEDIUM)
+  priority           JobCardPriority @default(NORMAL)
   location           AppointmentLocation @default(STATION)
   serviceType        String
   estimatedCost      Decimal?
-  part1Data          Json?         // Historical snapshot
-  part2AData         Json?         // Warranty case data
-  part3Data          Json?         // Requisition data
+  part1              Json?         // Historical snapshot
+  part2A             Json?         // Warranty case data
+  part3              Json?         // Requisition data
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+
   
   items         JobCardItem[]
   partsRequests PartsRequest[]
   invoices      Invoice[]
   files         File[]        @relation("JobCardFiles")
+  checkInSlips  CheckInSlip[]
+
   
   @@index([serviceCenterId, status, createdAt])
   @@index([customerId, createdAt])
   @@index([vehicleId, createdAt])
+  @@index([isTemporary])
+  @@index([passedToManager])
+  @@index([managerId])
 }
 
+
 enum JobCardStatus {
+  ARRIVAL_PENDING
+  JOB_CARD_PENDING_VEHICLE
+  JOB_CARD_ACTIVE
+  CHECK_IN_ONLY
+  NO_RESPONSE_LEAD
+  MANAGER_QUOTE
+  AWAITING_QUOTATION_APPROVAL
   CREATED
   ASSIGNED
   IN_PROGRESS
@@ -295,9 +336,10 @@ enum JobCardStatus {
 }
 
 enum JobCardPriority {
-  HIGH
-  MEDIUM
   LOW
+  NORMAL
+  HIGH
+  CRITICAL
 }
 
 // JobCardItem
@@ -326,7 +368,7 @@ model PartsRequest {
   jobCardId       String
   jobCard         JobCard            @relation(fields: [jobCardId], references: [id])
   status          PartsRequestStatus @default(PENDING)
-  urgency         JobCardPriority    @default(MEDIUM)
+  urgency         JobCardPriority    @default(NORMAL)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
@@ -465,7 +507,7 @@ model PartsIssue {
   requestedById       String
   requestedBy         User      @relation("RequestedBy", fields: [requestedById], references: [id])
   status              IssueStatus @default(PENDING_APPROVAL)
-  priority            JobCardPriority @default(MEDIUM)
+  priority            JobCardPriority @default(NORMAL)
   dispatchedDate      DateTime?
   receivedDate        DateTime?
   transportDetails    Json?
@@ -509,6 +551,37 @@ model Quotation {
   vehicleId         String
   vehicle           Vehicle  @relation(fields: [vehicleId], references: [id])
   appointmentId     String?
+  
+  // ✅ NEW: Document Type & Dates
+  documentType      String   @default("Quotation")  // Quotation or Proforma Invoice
+  quotationDate     DateTime @default(now())
+  validUntil        DateTime?
+  
+  // ✅ NEW: Insurance Information
+  hasInsurance      Boolean  @default(false)
+  insurerId         String?
+  insuranceStartDate DateTime?
+  insuranceEndDate  DateTime?
+  
+  // ✅ NEW: Additional Information
+  batterySerialNumber String?
+  customNotes       String?
+  noteTemplateId    String?
+  
+  // ✅ NEW: Manager Approval (for quotations)
+  passedToManager   Boolean  @default(false)
+  passedToManagerAt DateTime?
+  managerId         String?
+  
+  // ✅ NEW: Customer Approval Tracking
+  customerApprovalStatus String? @default("PENDING")  // PENDING, APPROVED, REJECTED
+  customerApprovedAt     DateTime?
+  customerRejectionReason String?
+  approvalHistory   Json?
+  
+  // ✅ NEW: Lead Integration
+  leadId            String?
+  
   status            QuotationStatus @default(DRAFT)
   subtotal          Decimal
   cgst              Decimal
@@ -521,13 +594,22 @@ model Quotation {
   items             QuotationItem[]
 
   @@index([serviceCenterId])
+  @@index([customerApprovalStatus])
+  @@index([passedToManager])
+  @@index([leadId])
 }
+
 
 enum QuotationStatus {
   DRAFT
-  SENT
-  APPROVED
-  REJECTED
+  SENT_TO_CUSTOMER
+  CUSTOMER_APPROVED
+  CUSTOMER_REJECTED
+  SENT_TO_MANAGER
+  MANAGER_APPROVED
+  MANAGER_REJECTED
+  NO_RESPONSE_LEAD
+  MANAGER_QUOTE
 }
 
 model QuotationItem {
@@ -631,3 +713,82 @@ model File {
   @@index([vehicleId])
   @@index([customerId])
 }
+
+// ✅ NEW: Lead Model
+model Lead {
+  id              String     @id @default(uuid())
+  leadNumber      String     @unique
+  customerId      String?
+  customerName    String
+  phone           String
+  email           String?
+  vehicleMake     String?
+  vehicleModel    String?
+  
+  // Lead Details
+  inquiryType     String     // Service, Sales, Parts
+  serviceType     String?
+  source          String     // walk_in, phone, referral, online, other
+  status          LeadStatus @default(NEW)
+  
+  // Conversion Tracking
+  convertedTo     String?    // appointment, quotation, job_card
+  convertedId     String?
+  quotationId     String?
+  jobCardId       String?
+  appointmentId   String?
+  
+  // Follow-up
+  notes           String?
+  followUpDate    DateTime?
+  assignedTo      String?
+  serviceCenterId String?
+  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  @@index([status])
+  @@index([phone])
+  @@index([serviceCenterId])
+  @@index([quotationId])
+}
+
+enum LeadStatus {
+  NEW
+  IN_DISCUSSION
+  JOB_CARD_IN_PROGRESS
+  CONVERTED
+  LOST
+}
+
+// ✅ NEW: CheckInSlip Model
+model CheckInSlip {
+  id                  String    @id @default(uuid())
+  slipNumber          String    @unique
+  jobCardId          String
+  jobCard             JobCard   @relation(fields: [jobCardId], references: [id])
+  serviceCenterId     String
+  
+  // Check-in Details
+  checkInDate         DateTime
+  checkInTime         String
+  expectedServiceDate DateTime?
+  
+  // Customer & Vehicle (denormalized for slip printing)
+  customerName        String
+  customerPhone       String
+  vehicleMake         String
+  vehicleModel        String
+  registrationNumber  String
+  
+  // Additional Information
+  notes               String?
+  odometerReading     String?
+  fuelLevel           String?
+  
+  createdAt           DateTime  @default(now())
+  
+  @@index([jobCardId])
+  @@index([serviceCenterId])
+}
+

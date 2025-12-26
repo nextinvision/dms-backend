@@ -50,4 +50,23 @@ export class JobCardsController {
     findOne(@Param('id') id: string) {
         return this.jobCardsService.findOne(id);
     }
+
+    @Post(':id/pass-to-manager')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    passToManager(@Param('id') id: string, @Body('managerId') managerId: string) {
+        return this.jobCardsService.passToManager(id, managerId);
+    }
+
+    @Post(':id/manager-review')
+    @Roles('admin', 'sc_manager')
+    managerReview(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
+        return this.jobCardsService.managerReview(id, data);
+    }
+
+    @Post(':id/convert-to-actual')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    convertToActual(@Param('id') id: string) {
+        return this.jobCardsService.convertToActual(id);
+    }
 }
+

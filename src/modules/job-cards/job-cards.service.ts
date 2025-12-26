@@ -44,20 +44,41 @@ export class JobCardsService {
 
         const jobCardNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
-        const { part2AData, uploadedBy, ...jobCardData } = createJobCardDto;
+        const { part2A, uploadedBy, items, ...jobCardData } = createJobCardDto;
 
         // Create Job Card in transaction
         const jobCard = await this.prisma.$transaction(async (tx) => {
             const card = await tx.jobCard.create({
                 data: {
-                    ...jobCardData,
+                    serviceType: jobCardData.serviceType,
+                    priority: jobCardData.priority,
+                    location: jobCardData.location,
+                    isTemporary: jobCardData.isTemporary ?? true,
                     jobCardNumber,
                     status: 'CREATED',
-                    part2AData: part2AData ? {
-                        issueDescription: part2AData.issueDescription,
-                        numberOfObservations: part2AData.numberOfObservations,
-                        symptom: part2AData.symptom,
-                        defectPart: part2AData.defectPart,
+                    serviceCenter: { connect: { id: jobCardData.serviceCenterId } },
+                    customer: { connect: { id: jobCardData.customerId } },
+                    vehicle: { connect: { id: jobCardData.vehicleId } },
+                    appointment: jobCardData.appointmentId ? { connect: { id: jobCardData.appointmentId } } : undefined,
+                    part2A: part2A ? {
+                        issueDescription: part2A.issueDescription,
+                        numberOfObservations: part2A.numberOfObservations,
+                        symptom: part2A.symptom,
+                        defectPart: part2A.defectPart,
+                    } : undefined,
+                    part1: jobCardData.part1 as any,
+                    items: items ? {
+                        create: items.map(item => ({
+                            srNo: item.srNo,
+                            partWarrantyTag: item.partWarrantyTag,
+                            partName: item.partName,
+                            partCode: item.partCode,
+                            qty: item.qty,
+                            amount: item.amount,
+                            technician: item.technician,
+                            labourCode: item.labourCode,
+                            itemType: item.itemType,
+                        }))
                     } : undefined,
                 },
             });
@@ -75,11 +96,11 @@ export class JobCardsService {
         });
 
         // Save warranty documentation file metadata if provided
-        if (part2AData?.files) {
+        if (part2A?.files) {
             const fileDtos = [];
 
-            if (part2AData.files.videoEvidence) {
-                fileDtos.push(...part2AData.files.videoEvidence.map(file => ({
+            if (part2A.files.videoEvidence) {
+                fileDtos.push(...part2A.files.videoEvidence.map(file => ({
                     url: file.url,
                     publicId: file.publicId,
                     filename: file.filename,
@@ -93,8 +114,8 @@ export class JobCardsService {
                 })));
             }
 
-            if (part2AData.files.vinImage) {
-                fileDtos.push(...part2AData.files.vinImage.map(file => ({
+            if (part2A.files.vinImage) {
+                fileDtos.push(...part2A.files.vinImage.map(file => ({
                     url: file.url,
                     publicId: file.publicId,
                     filename: file.filename,
@@ -109,8 +130,8 @@ export class JobCardsService {
                 })));
             }
 
-            if (part2AData.files.odoImage) {
-                fileDtos.push(...part2AData.files.odoImage.map(file => ({
+            if (part2A.files.odoImage) {
+                fileDtos.push(...part2A.files.odoImage.map(file => ({
                     url: file.url,
                     publicId: file.publicId,
                     filename: file.filename,
@@ -125,8 +146,8 @@ export class JobCardsService {
                 })));
             }
 
-            if (part2AData.files.damageImages) {
-                fileDtos.push(...part2AData.files.damageImages.map(file => ({
+            if (part2A.files.damageImages) {
+                fileDtos.push(...part2A.files.damageImages.map(file => ({
                     url: file.url,
                     publicId: file.publicId,
                     filename: file.filename,
@@ -148,6 +169,58 @@ export class JobCardsService {
 
         return jobCard;
     }
+
+    async passToManager(id: string, managerId: string) {
+        const jobCard = await this.findOne(id);
+        if (!jobCard.isTemporary) {
+            throw new BadRequestException('Only temporary job cards can be sent for manager approval');
+        }
+
+        return this.prisma.jobCard.update({
+            where: { id },
+            data: {
+                passedToManager: true,
+                passedToManagerAt: new Date(),
+                managerId,
+                managerReviewStatus: 'PENDING',
+            },
+        });
+    }
+
+    async managerReview(id: string, data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
+        const jobCard = await this.findOne(id);
+        if (!jobCard.passedToManager) {
+            throw new BadRequestException('Job card has not been passed to manager for review');
+        }
+
+        return this.prisma.jobCard.update({
+            where: { id },
+            data: {
+                managerReviewStatus: data.status,
+                managerReviewNotes: data.notes,
+                managerReviewedAt: new Date(),
+            },
+        });
+    }
+
+    async convertToActual(id: string) {
+        const jobCard = await this.findOne(id);
+        if (!jobCard.isTemporary) {
+            throw new BadRequestException('Job card is already an actual job card');
+        }
+        if (jobCard.managerReviewStatus !== 'APPROVED') {
+            throw new BadRequestException('Job card must be approved by a manager before conversion');
+        }
+
+        return this.prisma.jobCard.update({
+            where: { id },
+            data: {
+                isTemporary: false,
+                convertedToFinal: true,
+            },
+        });
+    }
+
 
     async assignEngineer(id: string, assignEngineerDto: AssignEngineerDto) {
         const jobCard = await this.prisma.jobCard.findUnique({ where: { id } });
