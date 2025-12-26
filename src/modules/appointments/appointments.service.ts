@@ -4,6 +4,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { FilesService } from '../files/files.service';
 import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
+import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class AppointmentsService {
@@ -123,8 +124,8 @@ export class AppointmentsService {
     }
 
     async findAll(query: any) {
-        const { page = 1, limit = 20, serviceCenterId, status, customerId, vehicleId } = query;
-        const skip = (page - 1) * limit;
+        const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId, vehicleId } = query;
+        const skip = calculateSkip(page, limit);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
@@ -135,27 +136,19 @@ export class AppointmentsService {
         const [data, total] = await Promise.all([
             this.prisma.appointment.findMany({
                 where,
-                skip: Number(skip),
-                take: Number(limit),
+                skip,
+                take: limit,
                 include: {
                     customer: { select: { name: true, phone: true } },
                     vehicle: { select: { registration: true, vehicleModel: true } },
                     serviceCenter: { select: { name: true } },
                 },
-                orderBy: { appointmentDate: 'asc' },
+                orderBy: buildOrderBy(sortBy || 'appointmentDate', sortOrder || 'asc'),
             }),
             this.prisma.appointment.count({ where }),
         ]);
 
-        return {
-            data,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        return paginate(data, total, page, limit);
     }
 
     async findOne(id: string) {

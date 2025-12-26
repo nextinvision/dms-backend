@@ -18,6 +18,9 @@ export enum FileCategory {
   WARRANTY_DAMAGE = 'warranty_damage',
   VEHICLE_CONDITION = 'vehicle_condition',
   VEHICLE_PHOTOS = 'vehicle_photos',
+  VEHICLE_VIN_IMAGE = 'vehicle_vin_image',
+  VEHICLE_ODO_IMAGE = 'vehicle_odo_image',
+  VEHICLE_DAMAGE_IMAGE = 'vehicle_damage_image',
 }
 
 export class CreateFileDto {

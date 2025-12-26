@@ -5,6 +5,7 @@ import { AssignEngineerDto } from './dto/assign-engineer.dto';
 import { UpdateJobCardStatusDto } from './dto/update-status.dto';
 import { FilesService } from '../files/files.service';
 import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
+import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class JobCardsService {
@@ -44,7 +45,7 @@ export class JobCardsService {
 
         const jobCardNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
-        const { part2A, uploadedBy, items, ...jobCardData } = createJobCardDto;
+        const { part2AData, part1Data, uploadedBy, items, ...jobCardData } = createJobCardDto;
 
         // Create Job Card in transaction
         const jobCard = await this.prisma.$transaction(async (tx) => {
@@ -60,13 +61,13 @@ export class JobCardsService {
                     customer: { connect: { id: jobCardData.customerId } },
                     vehicle: { connect: { id: jobCardData.vehicleId } },
                     appointment: jobCardData.appointmentId ? { connect: { id: jobCardData.appointmentId } } : undefined,
-                    part2A: part2A ? {
-                        issueDescription: part2A.issueDescription,
-                        numberOfObservations: part2A.numberOfObservations,
-                        symptom: part2A.symptom,
-                        defectPart: part2A.defectPart,
+                    part2AData: part2AData ? {
+                        issueDescription: part2AData.issueDescription,
+                        numberOfObservations: part2AData.numberOfObservations,
+                        symptom: part2AData.symptom,
+                        defectPart: part2AData.defectPart,
                     } : undefined,
-                    part1: jobCardData.part1 as any,
+                    part1Data: part1Data as any,
                     items: items ? {
                         create: items.map(item => ({
                             srNo: item.srNo,
@@ -96,74 +97,32 @@ export class JobCardsService {
         });
 
         // Save warranty documentation file metadata if provided
-        if (part2A?.files) {
+        if (part2AData?.files) {
             const fileDtos = [];
+            const files = part2AData.files;
 
-            if (part2A.files.videoEvidence) {
-                fileDtos.push(...part2A.files.videoEvidence.map(file => ({
-                    url: file.url,
-                    publicId: file.publicId,
-                    filename: file.filename,
-                    format: file.format,
-                    bytes: file.bytes,
-                    duration: file.duration,
-                    category: FileCategory.WARRANTY_VIDEO,
-                    relatedEntityId: jobCard.id,
-                    relatedEntityType: RelatedEntityType.JOB_CARD,
-                    uploadedBy,
-                })));
-            }
+            // Helper to process file array
+            const processFiles = (fileArray: any[], category: FileCategory) => {
+                if (!fileArray) return;
+                fileArray.forEach(file => {
+                    fileDtos.push({
+                        ...file,
+                        category,
+                        relatedEntityId: jobCard.id,
+                        relatedEntityType: RelatedEntityType.JOB_CARD,
+                        uploadedBy: uploadedBy,
+                    });
+                });
+            };
 
-            if (part2A.files.vinImage) {
-                fileDtos.push(...part2A.files.vinImage.map(file => ({
-                    url: file.url,
-                    publicId: file.publicId,
-                    filename: file.filename,
-                    format: file.format,
-                    bytes: file.bytes,
-                    width: file.width,
-                    height: file.height,
-                    category: FileCategory.WARRANTY_VIN,
-                    relatedEntityId: jobCard.id,
-                    relatedEntityType: RelatedEntityType.JOB_CARD,
-                    uploadedBy,
-                })));
-            }
-
-            if (part2A.files.odoImage) {
-                fileDtos.push(...part2A.files.odoImage.map(file => ({
-                    url: file.url,
-                    publicId: file.publicId,
-                    filename: file.filename,
-                    format: file.format,
-                    bytes: file.bytes,
-                    width: file.width,
-                    height: file.height,
-                    category: FileCategory.WARRANTY_ODO,
-                    relatedEntityId: jobCard.id,
-                    relatedEntityType: RelatedEntityType.JOB_CARD,
-                    uploadedBy,
-                })));
-            }
-
-            if (part2A.files.damageImages) {
-                fileDtos.push(...part2A.files.damageImages.map(file => ({
-                    url: file.url,
-                    publicId: file.publicId,
-                    filename: file.filename,
-                    format: file.format,
-                    bytes: file.bytes,
-                    width: file.width,
-                    height: file.height,
-                    category: FileCategory.WARRANTY_DAMAGE,
-                    relatedEntityId: jobCard.id,
-                    relatedEntityType: RelatedEntityType.JOB_CARD,
-                    uploadedBy,
-                })));
-            }
+            processFiles(files.videoEvidence, FileCategory.WARRANTY_VIDEO);
+            processFiles(files.vinImage, FileCategory.VEHICLE_VIN_IMAGE);
+            processFiles(files.odoImage, FileCategory.VEHICLE_ODO_IMAGE);
+            processFiles(files.damageImages, FileCategory.VEHICLE_DAMAGE_IMAGE);
 
             if (fileDtos.length > 0) {
-                await this.filesService.createMultipleFiles(fileDtos);
+                // Assuming createMany is the correct service method as per previous context
+                await this.filesService.createMany(fileDtos);
             }
         }
 
@@ -248,8 +207,8 @@ export class JobCardsService {
     }
 
     async findAll(query: any) {
-        const { page = 1, limit = 20, serviceCenterId, status, customerId, vehicleId } = query;
-        const skip = (page - 1) * limit;
+        const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId, vehicleId, passedToManager, managerReviewStatus } = query;
+        const skip = calculateSkip(page, limit);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
@@ -258,8 +217,8 @@ export class JobCardsService {
         if (vehicleId) where.vehicleId = vehicleId;
 
         // Manager Approval Filters
-        if (query.passedToManager === 'true') where.passedToManager = true;
-        if (query.managerReviewStatus) where.managerReviewStatus = query.managerReviewStatus;
+        if (passedToManager === 'true') where.passedToManager = true;
+        if (managerReviewStatus) where.managerReviewStatus = managerReviewStatus;
 
         const [data, total] = await Promise.all([
             this.prisma.jobCard.findMany({

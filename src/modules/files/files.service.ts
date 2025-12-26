@@ -57,6 +57,11 @@ export class FilesService {
     );
   }
 
+  // Alias for compatibility with JobCardsService
+  async createMany(createFileDtos: CreateFileDto[]) {
+    return this.createMultipleFiles(createFileDtos);
+  }
+
   async getFiles(
     entityType: string,
     entityId: string,

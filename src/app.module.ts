@@ -15,6 +15,7 @@ import { ServiceCentersModule } from './modules/service-centers/service-centers.
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { FilesModule } from './modules/files/files.module';
+import { LeadsModule } from './modules/leads/leads.module';
 import { TenantIsolationMiddleware } from './common/middleware/tenant.middleware';
 
 @Module({
@@ -35,6 +36,7 @@ import { TenantIsolationMiddleware } from './common/middleware/tenant.middleware
     UsersModule,
     AuthModule,
     FilesModule,
+    LeadsModule,
   ],
   controllers: [],
   providers: [],

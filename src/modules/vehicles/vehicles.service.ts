@@ -148,13 +148,13 @@ export class VehiclesService {
         const history = data.map((jc) => ({
             jobCardNumber: jc.jobCardNumber,
             date: jc.createdAt,
-            serviceType: jc.part1 ? (jc.part1 as any).serviceType : 'General',
+            serviceType: jc.part1Data ? (jc.part1Data as any).serviceType : 'General',
             engineerName: jc.assignedEngineer?.name || 'Unassigned',
             parts: jc.items.filter(i => i.itemType === 'part').map(i => i.partName),
             totalCost: jc.invoices[0]?.grandTotal || 0,
             invoiceNumber: jc.invoices[0]?.invoiceNumber || 'N/A',
-            customerFeedback: jc.part1 ? (jc.part1 as any).customerFeedback : '',
-            feedbackRating: jc.part1 ? (jc.part1 as any).feedbackRating : 0,
+            customerFeedback: jc.part1Data ? (jc.part1Data as any).customerFeedback : '',
+            feedbackRating: jc.part1Data ? (jc.part1Data as any).feedbackRating : 0,
         }));
 
         return {

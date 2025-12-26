@@ -51,10 +51,14 @@ export class WarrantyDocumentationFilesDto {
     }>;
 }
 
-export class JobCardPart1Dto {
+export class JobCardPart1DataDto {
     @IsString()
     @IsNotEmpty()
     fullName: string;
+    // ... (I will need to provide the full content or use multi_replace if I don't want to type it all)
+    // Actually replace_file_content is better for full class replacement if I have the content.
+    // Since I want to rename the class and the property, I'll do it in chunks.
+
 
     @IsString()
     @IsNotEmpty()
@@ -225,13 +229,14 @@ export class CreateJobCardDto {
     isTemporary?: boolean = true;
 
     @ValidateNested()
-    @Type(() => JobCardPart1Dto)
+    @Type(() => JobCardPart1DataDto)
     @IsOptional()
-    part1?: JobCardPart1Dto;
+    part1Data?: JobCardPart1DataDto;
 
-    @IsObject()
+    @ValidateNested()
+    @Type(() => Part2ADataDto)
     @IsOptional()
-    part2A?: Part2ADataDto;
+    part2AData?: Part2ADataDto;
 
     @IsString()
     @IsOptional()

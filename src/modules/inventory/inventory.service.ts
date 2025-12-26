@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateInventoryPartDto } from './dto/create-inventory-part.dto';
 import { AdjustStockDto, AdjustmentType } from './dto/adjust-stock.dto';
+import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class InventoryService {

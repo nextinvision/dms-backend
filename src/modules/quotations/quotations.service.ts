@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
+import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class QuotationsService {
@@ -90,8 +91,8 @@ export class QuotationsService {
 
 
     async findAll(query: any) {
-        const { page = 1, limit = 20, serviceCenterId, status, customerId } = query;
-        const skip = (page - 1) * limit;
+        const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId } = query;
+        const skip = calculateSkip(page, limit);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
@@ -101,27 +102,19 @@ export class QuotationsService {
         const [data, total] = await Promise.all([
             this.prisma.quotation.findMany({
                 where,
-                skip: Number(skip),
-                take: Number(limit),
+                skip,
+                take: limit,
                 include: {
                     customer: { select: { name: true, phone: true } },
                     vehicle: { select: { registration: true, vehicleModel: true } },
                     items: true,
                 },
-                orderBy: { createdAt: 'desc' },
+                orderBy: buildOrderBy(sortBy, sortOrder),
             }),
             this.prisma.quotation.count({ where }),
         ]);
 
-        return {
-            data,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        return paginate(data, total, page, limit);
     }
 
     async findOne(id: string) {
