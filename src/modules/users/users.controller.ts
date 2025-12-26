@@ -2,6 +2,8 @@ import {
     Controller,
     Get,
     Post,
+    Patch,
+    Delete,
     Body,
     Param,
     Query,
@@ -10,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -40,5 +43,17 @@ export class UsersController {
     @Roles('admin', 'sc_manager')
     findOne(@Param('id') id: string) {
         return this.usersService.findOne(id);
+    }
+
+    @Patch(':id')
+    @Roles('admin')
+    update(@Param('id') id: string, @Body() updateDto: UpdateUserDto) {
+        return this.usersService.update(id, updateDto);
+    }
+
+    @Delete(':id')
+    @Roles('admin')
+    remove(@Param('id') id: string) {
+        return this.usersService.remove(id);
     }
 }
