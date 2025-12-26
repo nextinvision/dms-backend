@@ -257,6 +257,10 @@ export class JobCardsService {
         if (customerId) where.customerId = customerId;
         if (vehicleId) where.vehicleId = vehicleId;
 
+        // Manager Approval Filters
+        if (query.passedToManager === 'true') where.passedToManager = true;
+        if (query.managerReviewStatus) where.managerReviewStatus = query.managerReviewStatus;
+
         const [data, total] = await Promise.all([
             this.prisma.jobCard.findMany({
                 where,

@@ -7,18 +7,32 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   HttpCode,
   HttpStatus,
   ParseArrayPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService } from './files.service';
 import { CreateFileDto } from './dto/create-file.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { Express } from 'express';
 
 @Controller('files')
 @UseGuards(JwtAuthGuard)
 export class FilesController {
   constructor(private readonly filesService: FilesService) { }
+
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.CREATED)
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+  ) {
+    return this.filesService.uploadAndSave(file, body);
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

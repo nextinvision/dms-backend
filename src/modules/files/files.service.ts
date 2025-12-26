@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { CreateFileDto } from './dto/create-file.dto';
+import { CreateFileDto, FileCategory } from './dto/create-file.dto';
 import { v2 as cloudinary } from 'cloudinary';
+import { Readable } from 'stream';
 
 @Injectable()
 export class FilesService {
@@ -132,6 +133,54 @@ export class FilesService {
     );
 
     return { message: `${files.length} file(s) deleted successfully` };
+  }
+  async uploadFile(file: Express.Multer.File, folder: string = 'dms_uploads'): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { folder: folder, resource_type: 'auto' },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        },
+      );
+
+      // Convert buffer to stream
+      const stream = new Readable();
+      stream.push(file.buffer);
+      stream.push(null);
+      stream.pipe(uploadStream);
+    });
+  }
+
+  async uploadAndSave(file: Express.Multer.File, metadata: Partial<CreateFileDto>) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    // 1. Upload to Cloudinary
+    // Use category as subfolder if present
+    const folder = `dms/${metadata.relatedEntityType || 'misc'}/${metadata.category || 'general'}`;
+    const cloudRes = await this.uploadFile(file, folder);
+
+    // 2. Prepare DTO
+    const fileDto: CreateFileDto = {
+      url: cloudRes.secure_url,
+      publicId: cloudRes.public_id,
+      filename: file.originalname, // Original name from user
+      format: cloudRes.format,
+      bytes: cloudRes.bytes,
+      width: cloudRes.width, // Optional, from Cloudinary
+      height: cloudRes.height,
+      duration: cloudRes.duration, // For videos
+      category: (metadata.category as FileCategory) || FileCategory.PHOTOS_VIDEOS,
+      relatedEntityId: metadata.relatedEntityId,
+      relatedEntityType: metadata.relatedEntityType,
+      uploadedBy: metadata.uploadedBy,
+      metadata: cloudRes, // Store full Cloudinary response as metadata
+    };
+
+    // 3. Save to Database
+    return this.createFileMetadata(fileDto);
   }
 }
 

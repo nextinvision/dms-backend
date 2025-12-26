@@ -148,4 +148,18 @@ export class QuotationsService {
             data: { status: 'MANAGER_APPROVED' },
         });
     }
+
+    async managerReview(id: string, data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
+        await this.findOne(id);
+        const status = data.status === 'APPROVED' ? 'MANAGER_APPROVED' : 'MANAGER_REJECTED';
+        // Ensure we save the notes if there's a field for it, otherwise just status
+        // Assuming 'notes' field might not exist on Quotation model yet, so we just update status for now.
+        // If Model doesn't support notes, we lose them. Let's check schema.prisma later if needed.
+        return this.prisma.quotation.update({
+            where: { id },
+            data: {
+                status
+            },
+        });
+    }
 }

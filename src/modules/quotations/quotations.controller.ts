@@ -43,6 +43,12 @@ export class QuotationsController {
         return this.quotationsService.approve(id);
     }
 
+    @Post(':id/manager-review')
+    @Roles('admin', 'sc_manager')
+    managerReview(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
+        return this.quotationsService.managerReview(id, data);
+    }
+
     @Post(':id/pass-to-manager')
     @Roles('admin', 'sc_manager', 'service_advisor')
     passToManager(@Param('id') id: string, @Body('managerId') managerId: string) {
