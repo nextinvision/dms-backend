@@ -202,10 +202,6 @@ export class AppointmentsService {
             data.estimatedDeliveryDate = new Date(updateAppointmentDto.estimatedDeliveryDate);
         }
 
-        if (updateAppointmentDto.checkInDate) {
-            data.checkInDate = new Date(updateAppointmentDto.checkInDate);
-        }
-
         // Audit trail - track who updated
         if (uploadedBy) {
             data.updatedById = uploadedBy;

@@ -7,9 +7,11 @@ import {
     Param,
     Query,
     UseGuards,
+    Delete,
 } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import { CreateInventoryPartDto } from './dto/create-inventory-part.dto';
+import { UpdateInventoryPartDto } from './dto/update-inventory-part.dto';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -27,7 +29,7 @@ export class InventoryController {
     }
 
     @Get()
-    @Roles('admin', 'sc_manager', 'inventory_manager', 'service_engineer', 'sc_advisor')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'service_engineer', 'service_advisor', 'call_center')
     findAll(@Query() query: any) {
         return this.inventoryService.findAll(query);
     }
@@ -42,5 +44,17 @@ export class InventoryController {
     @Roles('admin', 'sc_manager', 'inventory_manager')
     adjustStock(@Param('id') id: string, @Body() adjustDto: AdjustStockDto) {
         return this.inventoryService.adjustStock(id, adjustDto);
+    }
+
+    @Patch('parts/:id')
+    @Roles('admin', 'sc_manager', 'inventory_manager')
+    update(@Param('id') id: string, @Body() updateDto: UpdateInventoryPartDto) {
+        return this.inventoryService.update(id, updateDto);
+    }
+
+    @Delete('parts/:id')
+    @Roles('admin', 'sc_manager', 'inventory_manager')
+    remove(@Param('id') id: string) {
+        return this.inventoryService.remove(id);
     }
 }
