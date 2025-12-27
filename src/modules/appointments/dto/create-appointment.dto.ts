@@ -165,8 +165,4 @@ export class CreateAppointmentDto {
     @IsString()
     @IsOptional()
     duration?: string;
-
-    @IsBoolean()
-    @IsOptional()
-    customerArrived?: boolean;
 }

@@ -224,15 +224,6 @@ model Appointment {
   // Communication Preferences
   preferredCommunicationMode String?   // Phone, Email, SMS, WhatsApp
   
-  // Job Card Pre-fill Data (observation at appointment time)
-  batterySerialNumber String?
-  mcuSerialNumber    String?
-  vcuSerialNumber    String?
-  otherPartSerialNumber String?
-  technicianObservation String?
-  warrantyStatus      String?
-
-  
   // Check-in/Arrival Fields
   arrivalMode        String?           // vehicle_present, vehicle_absent, check_in_only
   checkInNotes       String?
@@ -240,9 +231,6 @@ model Appointment {
   checkInDate        DateTime?
   checkInTime        String?
   customerArrived    Boolean           @default(false)
-  
-  // Feedback
-  feedbackRating     Int?              // 1-5 stars
   
   // Timestamps
   createdAt          DateTime          @default(now())
