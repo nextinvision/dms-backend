@@ -49,14 +49,13 @@ export class LeadsService {
             },
             include: {
                 serviceCenter: true,
-                assignedTo: true,
             },
         });
     }
 
     async findAll(query: any) {
         const { page = 1, limit = 10, sortBy, sortOrder, ...filters } = query;
-        const skip = calculateSkip(page, limit);
+        const skip = calculateSkip(page, parseInt(limit));
 
         const where: any = {};
 
@@ -85,29 +84,25 @@ export class LeadsService {
             this.prisma.lead.findMany({
                 where,
                 skip,
-                take: limit,
-                // @ts-ignore - Relations will be available after migration
+                take: parseInt(limit),
+                // @ts-ignore - serviceCenter relation exists in schema
                 include: {
                     serviceCenter: true,
-                    assignedTo: true,
                 },
                 orderBy: buildOrderBy(sortBy, sortOrder),
             }),
             this.prisma.lead.count({ where }),
         ]);
 
-        return paginate(data, total, page, limit);
+        return paginate(data, total, page, parseInt(limit));
     }
 
     async findOne(id: string) {
         const lead = await this.prisma.lead.findUnique({
             where: { id },
-            // @ts-ignore - Relations will be available after migration
+            // @ts-ignore - serviceCenter relation exists in schema
             include: {
                 serviceCenter: true,
-                assignedTo: true,
-                quotations: true,
-                jobCards: true,
             },
         });
 
@@ -138,7 +133,6 @@ export class LeadsService {
             },
             include: {
                 serviceCenter: true,
-                assignedTo: true,
             },
         });
     }

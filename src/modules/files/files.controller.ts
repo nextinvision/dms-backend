@@ -51,12 +51,16 @@ export class FilesController {
 
   @Get()
   async getFiles(
-    @Query('entityType') entityType: string,
-    @Query('entityId') entityId: string,
+    @Query('entityType') entityType?: string,
+    @Query('entityId') entityId?: string,
     @Query('category') category?: string,
   ) {
+    // If no filters provided, return empty array or all files based on requirements
+    if (!entityType && !entityId) {
+      return [];
+    }
     if (!entityType || !entityId) {
-      throw new Error('entityType and entityId are required');
+      throw new Error('Both entityType and entityId are required when filtering');
     }
     return this.filesService.getFiles(entityType, entityId, category);
   }
