@@ -43,6 +43,11 @@ export class AppointmentsService {
                 ...appointmentData,
                 appointmentNumber,
                 appointmentDate: new Date(createAppointmentDto.appointmentDate),
+                ...(createAppointmentDto.estimatedDeliveryDate && {
+                    estimatedDeliveryDate: new Date(createAppointmentDto.estimatedDeliveryDate),
+                }),
+                // Audit trail
+                ...(uploadedBy && { createdById: uploadedBy }),
             },
         });
 
@@ -142,6 +147,8 @@ export class AppointmentsService {
                     customer: { select: { name: true, phone: true } },
                     vehicle: { select: { registration: true, vehicleModel: true } },
                     serviceCenter: { select: { name: true } },
+                    createdBy: { select: { id: true, name: true } },
+                    updatedBy: { select: { id: true, name: true } },
                 },
                 orderBy: buildOrderBy(sortBy || 'appointmentDate', sortOrder || 'asc'),
             }),
@@ -158,6 +165,8 @@ export class AppointmentsService {
                 customer: true,
                 vehicle: true,
                 serviceCenter: true,
+                createdBy: { select: { id: true, name: true } },
+                updatedBy: { select: { id: true, name: true } },
             },
         });
 
@@ -187,6 +196,15 @@ export class AppointmentsService {
 
         if (updateAppointmentDto.appointmentDate) {
             data.appointmentDate = new Date(updateAppointmentDto.appointmentDate);
+        }
+
+        if (updateAppointmentDto.estimatedDeliveryDate) {
+            data.estimatedDeliveryDate = new Date(updateAppointmentDto.estimatedDeliveryDate);
+        }
+
+        // Audit trail - track who updated
+        if (uploadedBy) {
+            data.updatedById = uploadedBy;
         }
 
         // Update appointment details

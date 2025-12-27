@@ -32,10 +32,14 @@ export class CustomersService {
 
         const customerNumber = `CUST-${nextNumber.toString().padStart(4, '0')}`;
 
+        // Extract createdById if provided
+        const { createdById, ...customerData } = createCustomerDto as any;
+
         return this.prisma.customer.create({
             data: {
-                ...createCustomerDto,
+                ...customerData,
                 customerNumber,
+                ...(createdById && { createdById }),
             },
         });
     }
@@ -68,7 +72,9 @@ export class CustomersService {
                     vehicles: true,
                     _count: {
                         select: { vehicles: true }
-                    }
+                    },
+                    createdBy: { select: { id: true, name: true } },
+                    updatedBy: { select: { id: true, name: true } },
                 }
             }),
             this.prisma.customer.count({ where }),
@@ -91,6 +97,8 @@ export class CustomersService {
             include: {
                 vehicles: true,
                 lastServiceCenter: true,
+                createdBy: { select: { id: true, name: true } },
+                updatedBy: { select: { id: true, name: true } },
             },
         });
 
@@ -103,9 +111,16 @@ export class CustomersService {
 
     async update(id: string, updateCustomerDto: UpdateCustomerDto) {
         await this.findOne(id);
+
+        // Extract updatedById if provided
+        const { updatedById, ...customerData } = updateCustomerDto as any;
+
         return this.prisma.customer.update({
             where: { id },
-            data: updateCustomerDto,
+            data: {
+                ...customerData,
+                ...(updatedById && { updatedById }),
+            },
         });
     }
 
