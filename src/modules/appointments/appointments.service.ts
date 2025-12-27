@@ -130,7 +130,7 @@ export class AppointmentsService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId, vehicleId } = query;
-        const skip = calculateSkip(page, limit);
+        const skip = calculateSkip(page, parseInt(limit));
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
@@ -142,7 +142,7 @@ export class AppointmentsService {
             this.prisma.appointment.findMany({
                 where,
                 skip,
-                take: limit,
+                take: parseInt(limit),
                 include: {
                     customer: { select: { name: true, phone: true } },
                     vehicle: { select: { registration: true, vehicleModel: true } },
@@ -155,7 +155,7 @@ export class AppointmentsService {
             this.prisma.appointment.count({ where }),
         ]);
 
-        return paginate(data, total, page, limit);
+        return paginate(data, total, page, parseInt(limit));
     }
 
     async findOne(id: string) {

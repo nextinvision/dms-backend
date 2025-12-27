@@ -38,25 +38,21 @@ export class LeadsService {
                 phone: createLeadDto.phone,
                 email: createLeadDto.email,
                 vehicleModel: createLeadDto.vehicleModel,
-                // @ts-ignore - Field will be available after migration
-                vehicleRegistration: createLeadDto.vehicleRegistration,
+                vehicleMake: createLeadDto.vehicleMake,
+                inquiryType: createLeadDto.inquiryType || 'Service',
                 serviceType: createLeadDto.serviceType,
                 source: createLeadDto.source,
                 notes: createLeadDto.notes,
                 status: LeadStatus.NEW,
-                serviceCenter: { connect: { id: createLeadDto.serviceCenterId } },
-                assignedToId: createLeadDto.assignedTo || null,
-            },
-            include: {
-                serviceCenter: true,
-                assignedTo: true,
+                serviceCenterId: createLeadDto.serviceCenterId,
+                assignedTo: createLeadDto.assignedTo || null,
             },
         });
     }
 
     async findAll(query: any) {
         const { page = 1, limit = 10, sortBy, sortOrder, ...filters } = query;
-        const skip = calculateSkip(page, limit);
+        const skip = calculateSkip(page, parseInt(limit));
 
         const where: any = {};
 
@@ -85,30 +81,18 @@ export class LeadsService {
             this.prisma.lead.findMany({
                 where,
                 skip,
-                take: limit,
-                // @ts-ignore - Relations will be available after migration
-                include: {
-                    serviceCenter: true,
-                    assignedTo: true,
-                },
+                take: parseInt(limit),
                 orderBy: buildOrderBy(sortBy, sortOrder),
             }),
             this.prisma.lead.count({ where }),
         ]);
 
-        return paginate(data, total, page, limit);
+        return paginate(data, total, page, parseInt(limit));
     }
 
     async findOne(id: string) {
         const lead = await this.prisma.lead.findUnique({
             where: { id },
-            // @ts-ignore - Relations will be available after migration
-            include: {
-                serviceCenter: true,
-                assignedTo: true,
-                quotations: true,
-                jobCards: true,
-            },
         });
 
         if (!lead) {
@@ -128,17 +112,12 @@ export class LeadsService {
                 phone: updateLeadDto.phone,
                 email: updateLeadDto.email,
                 vehicleModel: updateLeadDto.vehicleModel,
-                // @ts-ignore - Field will be available after migration
-                vehicleRegistration: updateLeadDto.vehicleRegistration,
+                vehicleMake: updateLeadDto.vehicleMake,
                 serviceType: updateLeadDto.serviceType,
                 source: updateLeadDto.source,
                 notes: updateLeadDto.notes,
                 status: updateLeadDto.status as any,
-                assignedToId: updateLeadDto.assignedTo || null,
-            },
-            include: {
-                serviceCenter: true,
-                assignedTo: true,
+                assignedTo: updateLeadDto.assignedTo || null,
             },
         });
     }

@@ -36,6 +36,14 @@ export class CreateLeadDto {
 
     @IsString()
     @IsOptional()
+    vehicleMake?: string;
+
+    @IsString()
+    @IsOptional()
+    inquiryType?: string;
+
+    @IsString()
+    @IsOptional()
     vehicleRegistration?: string;
 
     @IsString()
