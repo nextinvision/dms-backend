@@ -69,11 +69,20 @@ export class PartsIssuesService {
                 where,
                 skip: Number(skip),
                 take: Number(limit),
-                include: { toServiceCenter: true, requestedBy: true },
+                include: {
+                    toServiceCenter: true,
+                    requestedBy: true,
+                    items: true
+                },
                 orderBy: { createdAt: 'desc' },
             }),
             this.prisma.partsIssue.count({ where }),
         ]);
+
+        // Manually populate centralInventoryPart for each item
+        for (const issue of data) {
+            await this.populatePartDetails(issue);
+        }
 
         return {
             data,
@@ -97,7 +106,53 @@ export class PartsIssuesService {
         });
 
         if (!issue) throw new NotFoundException('Parts Issue not found');
+
+        // Populate parts
+        await this.populatePartDetails(issue);
+
         return issue;
+    }
+
+    private async populatePartDetails(issue: any) {
+        if (!issue.items || issue.items.length === 0) return;
+
+        const partIds = issue.items.map((i: any) => i.centralInventoryPartId);
+        const parts = await this.prisma.centralInventory.findMany({
+            where: { id: { in: partIds } }
+        });
+
+        issue.items = issue.items.map((item: any) => ({
+            ...item,
+            centralInventoryPart: parts.find(p => p.id === item.centralInventoryPartId)
+        }));
+    }
+
+    async reject(id: string, reason: string) {
+        const issue = await this.findOne(id);
+        if (issue.status !== 'PENDING_APPROVAL') throw new BadRequestException('Can only reject PENDING_APPROVAL issues');
+
+        return this.prisma.$transaction(async (tx) => {
+            // Unallocate stock
+            // Use any cast to avoid strict typing issues with 'items' if inferred incorrectly
+            const issueItems = (issue as any).items;
+            for (const item of issueItems) {
+                await tx.centralInventory.update({
+                    where: { id: item.centralInventoryPartId },
+                    data: {
+                        allocated: { decrement: item.requestedQty },
+                    },
+                });
+            }
+
+            return tx.partsIssue.update({
+                where: { id },
+                data: {
+                    status: 'REJECTED',
+                    // rejectionReason: reason, // Field does not exist in schema
+                    // adminRejectedAt: new Date() // Field does not exist in schema
+                },
+            });
+        });
     }
 
     async approve(id: string, approvedItems: any[]) {
@@ -111,8 +166,9 @@ export class PartsIssuesService {
                     data: { approvedQty: appItem.approvedQty },
                 });
 
-                // Update Central Inventory: stockQuantity -= approvedQty, allocated -= requestedQty
-                const originalItem = issue.items.find(i => i.id === appItem.itemId);
+                // Update Central Inventory
+                // Cast to any to access items safely
+                const originalItem = (issue as any).items.find((i: any) => i.id === appItem.itemId);
                 if (originalItem) {
                     await tx.centralInventory.update({
                         where: { id: originalItem.centralInventoryPartId },
@@ -140,7 +196,7 @@ export class PartsIssuesService {
             data: {
                 status: 'DISPATCHED',
                 dispatchedDate: new Date(),
-                transportDetails,
+                transportDetails: transportDetails as any, // Cast JSON
             },
         });
     }

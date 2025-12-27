@@ -419,26 +419,63 @@ model PartsRequestItem {
   @@index([requestId])
 }
 
-// Inventory (Service Center)
+// Inventory (Service Center) - Part Master
 model Inventory {
   id              String   @id @default(uuid())
   serviceCenterId String
   serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  partName        String
-  partNumber      String
-  category        String
-  unitPrice       Decimal
-  costPrice       Decimal
-  gstRate         Int
+  
+  // Basic Part Information
+  oemPartNumber   String?  // OEM Part Number (e.g., 2W_000000000272_003)
+  partName        String   // Part Name (e.g., COCKPIT TOP SHELL ANTHRACITE)
+  partNumber      String   // Internal Part Number (e.g., _003)
+  originType      String?  // OLD/NEW
+  category        String   // Category (e.g., BODY PANEL)
+  description     String?  // Description
+  
+  // Stock Information
   stockQuantity   Int
   minStockLevel   Int
   maxStockLevel   Int
-  location        String?
+  unit            String?  // Unit of measurement
+  location        String?  // Storage location
+  
+  // Part Details
+  brandName       String?  // Brand Name (e.g., OLA ELECTRIC)
+  variant         String?  // Variant (e.g., S1 PRO, S1)
+  partType        String?  // Part Type (e.g., PANEL)
+  color           String?  // Color (e.g., ANTHRACITE)
+  
+  // Pricing - Purchase
+  costPrice       Decimal  // Purchase Price (e.g., 950)
+  pricePreGst     Decimal? // Pre GST Amount To Us (e.g., 1400)
+  gstRateInput    Decimal? // GST Rate Input % (e.g., 18)
+  gstInput        Decimal? // GST Input Amount
+  
+  // Pricing - Sale
+  unitPrice       Decimal  // Sale Price Pre GST (e.g., 1652)
+  gstRate         Int      // GST Rate Output % (e.g., 18)
+  gstRateOutput   Decimal? // GST Rate Output Amount (e.g., 252)
+  totalPrice      Decimal? // Total Price including GST (e.g., 1864.4)
+  totalGst        Decimal? // Total GST Amount (e.g., 284.4)
+  
+  // Labour Information
+  labourName      String?  // Associated Labour Name (e.g., TOP COCKIT FITTING)
+  labourCode      String?  // Associated Labour Code (e.g., LB_000000000121)
+  labourWorkTime  String?  // Work Time (e.g., 0.3M)
+  labourRate      Decimal? // Labour Rate (e.g., 180)
+  labourGstRate   Decimal? // Labour GST Rate % (e.g., 18)
+  labourPrice     Decimal? // Labour Price including GST (e.g., 212.4)
+  
+  // Flags
+  highValuePart   Boolean  @default(false) // High Value Part (YES/NO)
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
   @@index([serviceCenterId, stockQuantity])
   @@index([partNumber])
+  @@index([oemPartNumber])
 }
 
 // Central Inventory

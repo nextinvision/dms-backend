@@ -61,6 +61,20 @@ export class InventoryService {
         });
     }
 
+    async update(id: string, updateDto: any) {
+        const part = await this.prisma.inventory.findUnique({ where: { id } });
+        if (!part) throw new NotFoundException('Part not found');
+
+        return this.prisma.inventory.update({
+            where: { id },
+            data: updateDto,
+        });
+    }
+
+    async remove(id: string) {
+        return this.prisma.inventory.delete({ where: { id } });
+    }
+
     async getLowStock(serviceCenterId: string) {
         // We need to find parts where stockQuantity <= minStockLevel
         // Since Prisma doesn't support comparing columns in `findMany` easily, we can use raw query or fetch and filter

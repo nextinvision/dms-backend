@@ -38,6 +38,12 @@ export class PartsIssuesController {
         return this.partsIssuesService.findOne(id);
     }
 
+    @Patch(':id/reject')
+    @Roles('admin', 'central_inventory_manager')
+    reject(@Param('id') id: string, @Body('reason') reason: string) {
+        return this.partsIssuesService.reject(id, reason);
+    }
+
     @Patch(':id/approve')
     @Roles('admin')
     approve(@Param('id') id: string, @Body('approvedItems') approvedItems: any[]) {
