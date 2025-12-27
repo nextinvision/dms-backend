@@ -38,17 +38,14 @@ export class LeadsService {
                 phone: createLeadDto.phone,
                 email: createLeadDto.email,
                 vehicleModel: createLeadDto.vehicleModel,
-                // @ts-ignore - Field will be available after migration
-                vehicleRegistration: createLeadDto.vehicleRegistration,
+                vehicleMake: createLeadDto.vehicleMake,
+                inquiryType: createLeadDto.inquiryType || 'Service',
                 serviceType: createLeadDto.serviceType,
                 source: createLeadDto.source,
                 notes: createLeadDto.notes,
                 status: LeadStatus.NEW,
-                serviceCenter: { connect: { id: createLeadDto.serviceCenterId } },
-                assignedToId: createLeadDto.assignedTo || null,
-            },
-            include: {
-                serviceCenter: true,
+                serviceCenterId: createLeadDto.serviceCenterId,
+                assignedTo: createLeadDto.assignedTo || null,
             },
         });
     }
@@ -85,10 +82,6 @@ export class LeadsService {
                 where,
                 skip,
                 take: parseInt(limit),
-                // @ts-ignore - serviceCenter relation exists in schema
-                include: {
-                    serviceCenter: true,
-                },
                 orderBy: buildOrderBy(sortBy, sortOrder),
             }),
             this.prisma.lead.count({ where }),
@@ -100,10 +93,6 @@ export class LeadsService {
     async findOne(id: string) {
         const lead = await this.prisma.lead.findUnique({
             where: { id },
-            // @ts-ignore - serviceCenter relation exists in schema
-            include: {
-                serviceCenter: true,
-            },
         });
 
         if (!lead) {
@@ -123,16 +112,12 @@ export class LeadsService {
                 phone: updateLeadDto.phone,
                 email: updateLeadDto.email,
                 vehicleModel: updateLeadDto.vehicleModel,
-                // @ts-ignore - Field will be available after migration
-                vehicleRegistration: updateLeadDto.vehicleRegistration,
+                vehicleMake: updateLeadDto.vehicleMake,
                 serviceType: updateLeadDto.serviceType,
                 source: updateLeadDto.source,
                 notes: updateLeadDto.notes,
                 status: updateLeadDto.status as any,
-                assignedToId: updateLeadDto.assignedTo || null,
-            },
-            include: {
-                serviceCenter: true,
+                assignedTo: updateLeadDto.assignedTo || null,
             },
         });
     }
