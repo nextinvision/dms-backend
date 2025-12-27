@@ -55,10 +55,6 @@ export class JobCardPart1DataDto {
     @IsString()
     @IsNotEmpty()
     fullName: string;
-    // ... (I will need to provide the full content or use multi_replace if I don't want to type it all)
-    // Actually replace_file_content is better for full class replacement if I have the content.
-    // Since I want to rename the class and the property, I'll do it in chunks.
-
 
     @IsString()
     @IsNotEmpty()
@@ -135,6 +131,67 @@ export class JobCardPart1DataDto {
     @IsString()
     @IsOptional()
     otherPartSerialNumber?: string;
+
+    // Operational Details from Appointment
+    @IsString()
+    @IsOptional()
+    assignedServiceAdvisor?: string;
+
+    @IsString()
+    @IsOptional()
+    assignedTechnician?: string;
+
+    @IsBoolean()
+    @IsOptional()
+    pickupDropRequired?: boolean;
+
+    @IsString()
+    @IsOptional()
+    pickupAddress?: string;
+
+    @IsString()
+    @IsOptional()
+    pickupState?: string;
+
+    @IsString()
+    @IsOptional()
+    pickupCity?: string;
+
+    @IsString()
+    @IsOptional()
+    pickupPincode?: string;
+
+    @IsString()
+    @IsOptional()
+    dropAddress?: string;
+
+    @IsString()
+    @IsOptional()
+    dropState?: string;
+
+    @IsString()
+    @IsOptional()
+    dropCity?: string;
+
+    @IsString()
+    @IsOptional()
+    dropPincode?: string;
+
+    @IsString()
+    @IsOptional()
+    preferredCommunicationMode?: string;
+
+    @IsString()
+    @IsOptional()
+    previousServiceHistory?: string;
+
+    @IsString()
+    @IsOptional()
+    estimatedServiceTime?: string;
+
+    @IsString()
+    @IsOptional()
+    odometerReading?: string;
 }
 
 export class Part2ADataDto {

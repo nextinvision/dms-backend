@@ -81,6 +81,8 @@ export class JobCardsService {
                             itemType: item.itemType,
                         }))
                     } : undefined,
+                    // Audit trail
+                    createdBy: uploadedBy ? { connect: { id: uploadedBy } } : undefined,
                 },
             });
 
@@ -297,6 +299,8 @@ export class JobCardsService {
                             name: true,
                         }
                     },
+                    createdBy: { select: { id: true, name: true } },
+                    updatedBy: { select: { id: true, name: true } },
                 },
                 orderBy: { createdAt: 'desc' },
             }),
@@ -320,11 +324,14 @@ export class JobCardsService {
             include: {
                 customer: true,
                 vehicle: true,
+                appointment: true,
                 assignedEngineer: true,
                 items: true,
                 partsRequests: {
                     include: { items: true }
-                }
+                },
+                createdBy: { select: { id: true, name: true } },
+                updatedBy: { select: { id: true, name: true } },
             },
         });
 

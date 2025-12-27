@@ -69,6 +69,17 @@ model User {
   requestedIssues  PartsIssue[]   @relation("RequestedBy")
   managerReviews   JobCard[]      @relation("ManagerReview") 
 
+  // Audit trail relations - records created by this user
+  customersCreated     Customer[]     @relation("CustomerCreatedBy")
+  customersUpdated     Customer[]     @relation("CustomerUpdatedBy")
+  appointmentsCreated  Appointment[]  @relation("AppointmentCreatedBy")
+  appointmentsUpdated  Appointment[]  @relation("AppointmentUpdatedBy")
+  jobCardsCreated      JobCard[]      @relation("JobCardCreatedBy")
+  jobCardsUpdated      JobCard[]      @relation("JobCardUpdatedBy")
+  quotationsCreated    Quotation[]    @relation("QuotationCreatedBy")
+  quotationsUpdated    Quotation[]    @relation("QuotationUpdatedBy")
+  invoicesCreated      Invoice[]      @relation("InvoiceCreatedBy")
+  invoicesUpdated      Invoice[]      @relation("InvoiceUpdatedBy")
 
   @@index([serviceCenterId])
 }
@@ -104,6 +115,12 @@ model Customer {
   updatedAt           DateTime  @updatedAt
   deletedAt           DateTime?
   
+  // Audit trail
+  createdById         String?
+  createdBy           User?     @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  updatedById         String?
+  updatedBy           User?     @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
+  
   vehicles      Vehicle[]
   appointments  Appointment[]
   jobCards      JobCard[]
@@ -113,6 +130,8 @@ model Customer {
   
   @@index([phone])
   @@index([customerNumber])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 // Vehicle
@@ -205,15 +224,6 @@ model Appointment {
   // Communication Preferences
   preferredCommunicationMode String?   // Phone, Email, SMS, WhatsApp
   
-  // Job Card Pre-fill Data (observation at appointment time)
-  batterySerialNumber String?
-  mcuSerialNumber    String?
-  vcuSerialNumber    String?
-  otherPartSerialNumber String?
-  technicianObservation String?
-  warrantyStatus      String?
-
-  
   // Check-in/Arrival Fields
   arrivalMode        String?           // vehicle_present, vehicle_absent, check_in_only
   checkInNotes       String?
@@ -222,12 +232,15 @@ model Appointment {
   checkInTime        String?
   customerArrived    Boolean           @default(false)
   
-  // Feedback
-  feedbackRating     Int?              // 1-5 stars
-  
   // Timestamps
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+  
+  // Audit trail
+  createdById        String?
+  createdBy          User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  updatedById        String?
+  updatedBy          User?             @relation("AppointmentUpdatedBy", fields: [updatedById], references: [id])
   
   // Relations
   jobCards           JobCard[]
@@ -238,6 +251,8 @@ model Appointment {
   @@index([vehicleId])
   @@index([appointmentDate])
   @@index([status])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 enum AppointmentLocation {
@@ -302,6 +317,11 @@ model JobCard {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
+  // Audit trail
+  createdById        String?
+  createdBy          User?         @relation("JobCardCreatedBy", fields: [createdById], references: [id])
+  updatedById        String?
+  updatedBy          User?         @relation("JobCardUpdatedBy", fields: [updatedById], references: [id])
   
   items         JobCardItem[]
   partsRequests PartsRequest[]
@@ -316,6 +336,8 @@ model JobCard {
   @@index([isTemporary])
   @@index([passedToManager])
   @@index([managerId])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 
@@ -591,12 +613,20 @@ model Quotation {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Audit trail
+  createdById       String?
+  createdBy         User?    @relation("QuotationCreatedBy", fields: [createdById], references: [id])
+  updatedById       String?
+  updatedBy         User?    @relation("QuotationUpdatedBy", fields: [updatedById], references: [id])
+
   items             QuotationItem[]
 
   @@index([serviceCenterId])
   @@index([customerApprovalStatus])
   @@index([passedToManager])
   @@index([leadId])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 
@@ -646,10 +676,18 @@ model Invoice {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // Audit trail
+  createdById      String?
+  createdBy        User?    @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  updatedById      String?
+  updatedBy        User?    @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id])
+
   items            InvoiceItem[]
 
   @@index([serviceCenterId])
   @@index([jobCardId])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 enum InvoiceStatus {

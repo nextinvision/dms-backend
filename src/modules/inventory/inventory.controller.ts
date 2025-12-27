@@ -27,7 +27,7 @@ export class InventoryController {
     }
 
     @Get()
-    @Roles('admin', 'sc_manager', 'inventory_manager', 'service_engineer')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'service_engineer', 'sc_advisor')
     findAll(@Query() query: any) {
         return this.inventoryService.findAll(query);
     }
