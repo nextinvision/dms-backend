@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -68,6 +69,18 @@ export class FilesController {
   @Get(':id')
   async getFileById(@Param('id') id: string) {
     return this.filesService.getFileById(id);
+  }
+
+  @Patch('update-entity')
+  @HttpCode(HttpStatus.OK)
+  async updateEntityAssociation(
+    @Body() body: { tempEntityId: string; actualEntityId: string; entityType: string },
+  ) {
+    return this.filesService.updateEntityAssociation(
+      body.tempEntityId,
+      body.actualEntityId,
+      body.entityType,
+    );
   }
 
   @Delete(':id')

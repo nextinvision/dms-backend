@@ -46,7 +46,7 @@ export class AppointmentsController {
     }
 
     @Delete(':id')
-    @Roles('admin', 'sc_manager')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'call_center')
     remove(@Param('id') id: string) {
         return this.appointmentsService.remove(id);
     }

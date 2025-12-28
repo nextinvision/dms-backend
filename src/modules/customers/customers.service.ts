@@ -112,6 +112,21 @@ export class CustomersService {
     async update(id: string, updateCustomerDto: UpdateCustomerDto) {
         await this.findOne(id);
 
+        // If phone is being updated, check if it's already taken by another customer
+        if (updateCustomerDto.phone) {
+            const existing = await this.prisma.customer.findFirst({
+                where: {
+                    phone: updateCustomerDto.phone,
+                    id: { not: id },
+                    deletedAt: null
+                },
+            });
+
+            if (existing) {
+                throw new BadRequestException('Phone number is already in use by another customer');
+            }
+        }
+
         // Extract updatedById if provided
         const { updatedById, ...customerData } = updateCustomerDto as any;
 
