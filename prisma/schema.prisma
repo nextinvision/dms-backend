@@ -99,7 +99,7 @@ model Customer {
   id                  String    @id @default(uuid())
   customerNumber      String    @unique
   name                String
-  phone               String
+  phone               String    @unique
   whatsappNumber      String?
   alternateNumber     String?
   email               String?

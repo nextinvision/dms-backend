@@ -104,62 +104,598 @@ async function main() {
   });
 
   // ==============================================================================
-  // 2. INVENTORY CATALOG (Central & Local)
+  // 2. INVENTORY CATALOG (Central & Local) - COMPREHENSIVE PARTS DATA
   // ==============================================================================
-  console.log('📦 Seeding Inventory...');
+  console.log('📦 Seeding Comprehensive Inventory...');
 
-  const partsData = [
-    { name: 'Li-ion Battery Pack 40kWh', code: 'BATT-NEX-001', cat: 'PARTS', price: 500000, cost: 400000, stock: 50 },
-    { name: 'Brake Pad Set (Front)', code: 'BRK-FR-001', cat: 'PARTS', price: 2500, cost: 1500, stock: 100 },
-    { name: 'Brake Pad Set (Rear)', code: 'BRK-RR-001', cat: 'PARTS', price: 2200, cost: 1300, stock: 100 },
-    { name: 'Cabin Air Filter', code: 'FLT-CAB-001', cat: 'CONSUMABLES', price: 850, cost: 400, stock: 200 },
-    { name: 'Wiper Blade Set', code: 'WIP-SET-001', cat: 'CONSUMABLES', price: 1200, cost: 600, stock: 150 },
-    { name: 'Coolant (1L)', code: 'OIL-COOL-001', cat: 'FLUIDS', price: 450, cost: 200, stock: 500 },
-    { name: 'Brake Fluid (500ml)', code: 'OIL-BRK-001', cat: 'FLUIDS', price: 350, cost: 150, stock: 400 },
-    { name: 'Headlight Assembly (L)', code: 'LGT-HD-L-01', cat: 'PARTS', price: 8500, cost: 6000, stock: 30 },
-    { name: 'Headlight Assembly (R)', code: 'LGT-HD-R-01', cat: 'PARTS', price: 8500, cost: 6000, stock: 30 },
-    { name: 'Front Bumper', code: 'BMP-FR-001', cat: 'PARTS', price: 12000, cost: 8000, stock: 20 },
+  const comprehensivePartsData = [
+    {
+      // Battery Pack
+      oemPartNumber: 'EV_BAT_40KWH_001',
+      partName: 'Li-ion Battery Pack 40kWh',
+      partNumber: 'BATT-NEX-001',
+      originType: 'NEW',
+      category: 'BATTERY',
+      description: 'High-performance lithium-ion battery pack, 40kWh capacity, 8-year warranty',
+      brandName: 'Tata AutoComp',
+      variant: 'Nexon EV, Tigor EV',
+      partType: 'GENUINE',
+      color: 'N/A',
+
+      // Pricing - Purchase
+      costPrice: 400000,
+      pricePreGst: 400000,
+      gstRateInput: 18,
+      gstInput: 72000,
+
+      // Pricing - Sale
+      unitPrice: 500000,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 590000,
+      totalGst: 90000,
+
+      // Stock
+      stockQuantity: 50,
+      minStockLevel: 10,
+      maxStockLevel: 100,
+      unit: 'piece',
+      location: 'A-01-BATTERY',
+
+      // Labor
+      labourName: 'Battery Replacement',
+      labourCode: 'LAB-BATT-001',
+      labourWorkTime: '4.0H',
+      labourRate: 500,
+      labourGstRate: 18,
+      labourPrice: 2360, // (4 * 500 * 1.18)
+
+      highValuePart: true,
+
+      central: { stock: 50, price: 500000, cost: 400000 },
+      sc: { stock: 10, price: 500000, cost: 400000 }
+    },
+    {
+      // Brake Pads - Front
+      oemPartNumber: 'EV_BRK_FR_CERAMIC_001',
+      partName: 'Brake Pad Set (Front) - Ceramic',
+      partNumber: 'BRK-FR-001',
+      originType: 'NEW',
+      category: 'BRAKES',
+      description: 'Premium ceramic brake pads for front wheels, low dust, low noise',
+      brandName: 'Bosch',
+      variant: 'Nexon EV, XUV400',
+      partType: 'GENUINE',
+      color: 'N/A',
+
+      costPrice: 1500,
+      pricePreGst: 1500,
+      gstRateInput: 18,
+      gstInput: 270,
+
+      unitPrice: 2500,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 2950,
+      totalGst: 450,
+
+      stockQuantity: 100,
+      minStockLevel: 20,
+      maxStockLevel: 200,
+      unit: 'set',
+      location: 'B-03-BRAKES',
+
+      labourName: 'Front Brake Pad Replacement',
+      labourCode: 'LAB-BRK-FR-001',
+      labourWorkTime: '1.5H',
+      labourRate: 400,
+      labourGstRate: 18,
+      labourPrice: 708, // (1.5 * 400 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 100, price: 2500, cost: 1500 },
+      sc: { stock: 20, price: 2500, cost: 1500 }
+    },
+    {
+      // Brake Pads - Rear
+      oemPartNumber: 'EV_BRK_RR_CERAMIC_001',
+      partName: 'Brake Pad Set (Rear) - Ceramic',
+      partNumber: 'BRK-RR-001',
+      originType: 'NEW',
+      category: 'BRAKES',
+      description: 'Premium ceramic brake pads for rear wheels, extended life',
+      brandName: 'Bosch',
+      variant: 'Nexon EV, XUV400',
+      partType: 'GENUINE',
+      color: 'N/A',
+
+      costPrice: 1300,
+      pricePreGst: 1300,
+      gstRateInput: 18,
+      gstInput: 234,
+
+      unitPrice: 2200,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 2596,
+      totalGst: 396,
+
+      stockQuantity: 100,
+      minStockLevel: 20,
+      maxStockLevel: 200,
+      unit: 'set',
+      location: 'B-03-BRAKES',
+
+      labourName: 'Rear Brake Pad Replacement',
+      labourCode: 'LAB-BRK-RR-001',
+      labourWorkTime: '1.0H',
+      labourRate: 400,
+      labourGstRate: 18,
+      labourPrice: 472, // (1.0 * 400 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 100, price: 2200, cost: 1300 },
+      sc: { stock: 20, price: 2200, cost: 1300 }
+    },
+    {
+      // Air Filter
+      oemPartNumber: 'EV_FLT_CAB_HEPA_001',
+      partName: 'Cabin Air Filter - HEPA',
+      partNumber: 'FLT-CAB-001',
+      originType: 'NEW',
+      category: 'FILTERS',
+      description: 'HEPA cabin air filter, PM2.5 filtration, antibacterial coating',
+      brandName: 'Mahle',
+      variant: 'Universal EV',
+      partType: 'AFTERMARKET',
+      color: 'White',
+
+      costPrice: 400,
+      pricePreGst: 400,
+      gstRateInput: 18,
+      gstInput: 72,
+
+      unitPrice: 850,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 1003,
+      totalGst: 153,
+
+      stockQuantity: 200,
+      minStockLevel: 50,
+      maxStockLevel: 300,
+      unit: 'piece',
+      location: 'C-05-FILTERS',
+
+      labourName: 'Cabin Filter Replacement',
+      labourCode: 'LAB-FLT-001',
+      labourWorkTime: '0.25H',
+      labourRate: 300,
+      labourGstRate: 18,
+      labourPrice: 89, // (0.25 * 300 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 200, price: 850, cost: 400 },
+      sc: { stock: 40, price: 850, cost: 400 }
+    },
+    {
+      // Wiper Blades
+      oemPartNumber: 'EV_WIP_PREMIUM_SET_001',
+      partName: 'Premium Wiper Blade Set',
+      partNumber: 'WIP-SET-001',
+      originType: 'NEW',
+      category: 'ACCESSORIES',
+      description: 'Silicone wiper blades, all-weather performance, front pair',
+      brandName: 'Hella',
+      variant: 'Nexon EV',
+      partType: 'GENUINE',
+      color: 'Black',
+
+      costPrice: 600,
+      pricePreGst: 600,
+      gstRateInput: 18,
+      gstInput: 108,
+
+      unitPrice: 1200,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 1416,
+      totalGst: 216,
+
+      stockQuantity: 150,
+      minStockLevel: 30,
+      maxStockLevel: 250,
+      unit: 'set',
+      location: 'D-02-ACCESSORIES',
+
+      labourName: 'Wiper Blade Installation',
+      labourCode: 'LAB-WIP-001',
+      labourWorkTime: '0.15H',
+      labourRate: 250,
+      labourGstRate: 18,
+      labourPrice: 44, // (0.15 * 250 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 150, price: 1200, cost: 600 },
+      sc: { stock: 30, price: 1200, cost: 600 }
+    },
+    {
+      // Coolant
+      oemPartNumber: 'EV_COOL_G12_1L_001',
+      partName: 'EV Coolant G12+ (1L)',
+      partNumber: 'OIL-COOL-001',
+      originType: 'NEW',
+      category: 'FLUIDS',
+      description: 'Long-life coolant for electric vehicle thermal management system',
+      brandName: 'Mobil',
+      variant: 'All EV Models',
+      partType: 'GENUINE',
+      color: 'Pink',
+
+      costPrice: 200,
+      pricePreGst: 200,
+      gstRateInput: 18,
+      gstInput: 36,
+
+      unitPrice: 450,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 531,
+      totalGst: 81,
+
+      stockQuantity: 500,
+      minStockLevel: 100,
+      maxStockLevel: 800,
+      unit: 'litre',
+      location: 'E-01-FLUIDS',
+
+      labourName: 'Coolant Top-up',
+      labourCode: 'LAB-COOL-001',
+      labourWorkTime: '0.20H',
+      labourRate: 250,
+      labourGstRate: 18,
+      labourPrice: 59, // (0.20 * 250 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 500, price: 450, cost: 200 },
+      sc: { stock: 100, price: 450, cost: 200 }
+    },
+    {
+      // Brake Fluid
+      oemPartNumber: 'EV_BRK_FL_DOT4_500ML_001',
+      partName: 'Brake Fluid DOT-4 (500ml)',
+      partNumber: 'OIL-BRK-001',
+      originType: 'NEW',
+      category: 'FLUIDS',
+      description: 'High-performance DOT-4 brake fluid, high boiling point',
+      brandName: 'Castrol',
+      variant: 'Universal',
+      partType: 'GENUINE',
+      color: 'Amber',
+
+      costPrice: 150,
+      pricePreGst: 150,
+      gstRateInput: 18,
+      gstInput: 27,
+
+      unitPrice: 350,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 413,
+      totalGst: 63,
+
+      stockQuantity: 400,
+      minStockLevel: 80,
+      maxStockLevel: 600,
+      unit: 'bottle',
+      location: 'E-01-FLUIDS',
+
+      labourName: 'Brake Fluid Replacement',
+      labourCode: 'LAB-BRK-FL-001',
+      labourWorkTime: '0.50H',
+      labourRate: 350,
+      labourGstRate: 18,
+      labourPrice: 207, // (0.50 * 350 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 400, price: 350, cost: 150 },
+      sc: { stock: 80, price: 350, cost: 150 }
+    },
+    {
+      // Headlight - Left
+      oemPartNumber: 'EV_LGT_HD_LED_L_001',
+      partName: 'LED Headlight Assembly (Left)',
+      partNumber: 'LGT-HD-L-01',
+      originType: 'NEW',
+      category: 'LIGHTING',
+      description: 'Full LED headlight assembly with DRL, projector type, left side',
+      brandName: 'Valeo',
+      variant: 'Nexon EV XZ+ onwards',
+      partType: 'GENUINE',
+      color: 'Clear',
+
+      costPrice: 6000,
+      pricePreGst: 6000,
+      gstRateInput: 18,
+      gstInput: 1080,
+
+      unitPrice: 8500,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 10030,
+      totalGst: 1530,
+
+      stockQuantity: 30,
+      minStockLevel: 5,
+      maxStockLevel: 50,
+      unit: 'piece',
+      location: 'F-04-LIGHTING',
+
+      labourName: 'Headlight Assembly Replacement',
+      labourCode: 'LAB-LGT-001',
+      labourWorkTime: '1.0H',
+      labourRate: 450,
+      labourGstRate: 18,
+      labourPrice: 531, // (1.0 * 450 * 1.18)
+
+      highValuePart: true,
+
+      central: { stock: 30, price: 8500, cost: 6000 },
+      sc: { stock: 6, price: 8500, cost: 6000 }
+    },
+    {
+      // Headlight - Right
+      oemPartNumber: 'EV_LGT_HD_LED_R_001',
+      partName: 'LED Headlight Assembly (Right)',
+      partNumber: 'LGT-HD-R-01',
+      originType: 'NEW',
+      category: 'LIGHTING',
+      description: 'Full LED headlight assembly with DRL, projector type, right side',
+      brandName: 'Valeo',
+      variant: 'Nexon EV XZ+ onwards',
+      partType: 'GENUINE',
+      color: 'Clear',
+
+      costPrice: 6000,
+      pricePreGst: 6000,
+      gstRateInput: 18,
+      gstInput: 1080,
+
+      unitPrice: 8500,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 10030,
+      totalGst: 1530,
+
+      stockQuantity: 30,
+      minStockLevel: 5,
+      maxStockLevel: 50,
+      unit: 'piece',
+      location: 'F-04-LIGHTING',
+
+      labourName: 'Headlight Assembly Replacement',
+      labourCode: 'LAB-LGT-001',
+      labourWorkTime: '1.0H',
+      labourRate: 450,
+      labourGstRate: 18,
+      labourPrice: 531,
+
+      highValuePart: true,
+
+      central: { stock: 30, price: 8500, cost: 6000 },
+      sc: { stock: 6, price: 8500, cost: 6000 }
+    },
+    {
+      // Front Bumper
+      oemPartNumber: 'EV_BMP_FR_PAINTED_001',
+      partName: 'Front Bumper Assembly (Painted)',
+      partNumber: 'BMP-FR-001',
+      originType: 'NEW',
+      category: 'BODY PARTS',
+      description: 'Complete front bumper assembly, pre-painted, includes grille and fog lamp housings',
+      brandName: 'Tata AutoComp',
+      variant: 'Nexon EV',
+      partType: 'GENUINE',
+      color: 'Multiple (As per VIN)',
+
+      costPrice: 8000,
+      pricePreGst: 8000,
+      gstRateInput: 18,
+      gstInput: 1440,
+
+      unitPrice: 12000,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 14160,
+      totalGst: 2160,
+
+      stockQuantity: 20,
+      minStockLevel: 3,
+      maxStockLevel: 30,
+      unit: 'piece',
+      location: 'G-01-BODYPARTS',
+
+      labourName: 'Front Bumper Replacement & Fitment',
+      labourCode: 'LAB-BMP-001',
+      labourWorkTime: '2.5H',
+      labourRate: 500,
+      labourGstRate: 18,
+      labourPrice: 1475, // (2.5 * 500 * 1.18)
+
+      highValuePart: true,
+
+      central: { stock: 20, price: 12000, cost: 8000 },
+      sc: { stock: 4, price: 12000, cost: 8000 }
+    },
+    {
+      // Tire
+      oemPartNumber: 'EV_TYR_215_60_R16_001',
+      partName: 'EV Tire 215/60 R16',
+      partNumber: 'TYR-EV-001',
+      originType: 'NEW',
+      category: 'TIRES',
+      description: 'Low rolling resistance tire designed for electric vehicles, 215/60 R16',
+      brandName: 'MRF',
+      variant: 'Nexon EV, ZS EV',
+      partType: 'GENUINE',
+      color: 'Black',
+
+      costPrice: 4500,
+      pricePreGst: 4500,
+      gstRateInput: 18,
+      gstInput: 810,
+
+      unitPrice: 6500,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 7670,
+      totalGst: 1170,
+
+      stockQuantity: 80,
+      minStockLevel: 16,
+      maxStockLevel: 120,
+      unit: 'piece',
+      location: 'H-01-TIRES',
+
+      labourName: 'Tire Replacement & Balancing',
+      labourCode: 'LAB-TYR-001',
+      labourWorkTime: '0.50H',
+      labourRate: 400,
+      labourGstRate: 18,
+      labourPrice: 236, // (0.50 * 400 * 1.18)
+
+      highValuePart: false,
+
+      central: { stock: 80, price: 6500, cost: 4500 },
+      sc: { stock: 16, price: 6500, cost: 4500 }
+    },
+    {
+      // Charger Cable
+      oemPartNumber: 'EV_CHG_TYPE2_5M_001',
+      partName: 'Type-2 AC Charging Cable (5m)',
+      partNumber: 'CHG-CABLE-001',
+      originType: 'NEW',
+      category: 'CHARGING',
+      description: 'Type-2 AC charging cable, 32A capacity, 5 meter length, weather resistant',
+      brandName: 'Delta',
+      variant: 'Universal EV',
+      partType: 'GENUINE',
+      color: 'Black',
+
+      costPrice: 3500,
+      pricePreGst: 3500,
+      gstRateInput: 18,
+      gstInput: 630,
+
+      unitPrice: 5500,
+      gstRate: 18,
+      gstRateOutput: 18,
+      totalPrice: 6490,
+      totalGst: 990,
+
+      stockQuantity: 40,
+      minStockLevel: 10,
+      maxStockLevel: 60,
+      unit: 'piece',
+      location: 'I-01-CHARGING',
+
+      labourName: 'Charging Cable Inspection',
+      labourCode: 'LAB-CHG-001',
+      labourWorkTime: '0.15H',
+      labourRate: 300,
+      labourGstRate: 18,
+      labourPrice: 53, // (0.15 * 300 * 1.18)
+
+      highValuePart: true,
+
+      central: { stock: 40, price: 5500, cost: 3500 },
+      sc: { stock: 8, price: 5500, cost: 3500 }
+    }
   ];
 
   const centralParts = [];
   const scParts = [];
 
-  for (const p of partsData) {
-    // Seed Central
+  for (const p of comprehensivePartsData) {
+    // Seed Central Inventory with all fields
     const cp = await prisma.centralInventory.upsert({
-      where: { partNumber: p.code },
+      where: { partNumber: p.partNumber },
       update: {},
       create: {
-        partName: p.name,
-        partNumber: p.code,
-        category: p.cat,
-        unitPrice: p.price,
-        costPrice: p.cost,
-        stockQuantity: p.stock,
-        gstRate: 18,
-        minStockLevel: 10,
-        available: p.stock
+        partName: p.partName,
+        partNumber: p.partNumber,
+        category: p.category,
+        unitPrice: p.central.price,
+        costPrice: p.central.cost,
+        stockQuantity: p.central.stock,
+        gstRate: p.gstRate,
+        minStockLevel: p.minStockLevel,
+        available: p.central.stock
       }
     });
     centralParts.push(cp);
 
-    // Seed Local SC1
+    // Seed Local SC1 Inventory with ALL available fields
     const sp = await prisma.inventory.create({
       data: {
         serviceCenterId: sc1.id,
-        partName: p.name,
-        partNumber: p.code,
-        category: p.cat,
-        unitPrice: p.price,
-        costPrice: p.cost,
-        stockQuantity: Math.floor(p.stock / 5), // Smaller stock at SC
-        gstRate: 18,
-        minStockLevel: 5,
-        maxStockLevel: 50
+
+        // Basic Part Information
+        oemPartNumber: p.oemPartNumber,
+        partName: p.partName,
+        partNumber: p.partNumber,
+        originType: p.originType,
+        category: p.category,
+        description: p.description,
+
+        // Stock Information
+        stockQuantity: p.sc.stock,
+        minStockLevel: p.minStockLevel,
+        maxStockLevel: p.maxStockLevel,
+        unit: p.unit,
+        location: p.location,
+
+        // Part Details
+        brandName: p.brandName,
+        variant: p.variant,
+        partType: p.partType,
+        color: p.color,
+
+        // Pricing - Purchase
+        costPrice: p.sc.cost,
+        pricePreGst: p.pricePreGst,
+        gstRateInput: p.gstRateInput,
+        gstInput: p.gstInput,
+
+        // Pricing - Sale
+        unitPrice: p.sc.price,
+        gstRate: p.gstRate,
+        gstRateOutput: p.gstRateOutput,
+        totalPrice: p.totalPrice,
+        totalGst: p.totalGst,
+
+        // Labour Information
+        labourName: p.labourName,
+        labourCode: p.labourCode,
+        labourWorkTime: p.labourWorkTime,
+        labourRate: p.labourRate,
+        labourGstRate: p.labourGstRate,
+        labourPrice: p.labourPrice,
+
+        // Flags
+        highValuePart: p.highValuePart
       }
     });
     scParts.push(sp);
   }
+
+  console.log(`✅ Created ${centralParts.length} central parts and ${scParts.length} SC parts with comprehensive data!`);
 
   // ==============================================================================
   // 3. OPERATIONAL DATA (Customers, Vehicles)
