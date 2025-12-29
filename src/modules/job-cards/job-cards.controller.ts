@@ -45,6 +45,12 @@ export class JobCardsController {
         return this.jobCardsService.findAll(query);
     }
 
+    @Patch(':id')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
+    update(@Param('id') id: string, @Body() updateJobCardDto: Partial<CreateJobCardDto>) {
+        return this.jobCardsService.update(id, updateJobCardDto);
+    }
+
     @Get(':id')
     @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
     findOne(@Param('id') id: string) {

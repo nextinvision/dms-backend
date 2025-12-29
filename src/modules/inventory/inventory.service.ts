@@ -20,14 +20,6 @@ export class InventoryService {
 
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
         if (category) where.category = category;
-        if (lowStock === 'true') {
-            where.stockQuantity = { lte: this.prisma.inventory.fields.minStockLevel }; // Wait, this syntax is not quite right in Prisma where clause
-            // Actually:
-            // where.AND = [
-            //   { stockQuantity: { lte: { _ref: 'minStockLevel' } } } // Prisma doesn't support field references in where directly like this easily without raw SQL or a specific version
-            // ];
-            // I'll just do it in code or use a simple threshold if minStockLevel is dynamic
-        }
 
         if (search) {
             where.OR = [
@@ -36,10 +28,17 @@ export class InventoryService {
             ];
         }
 
-        return this.prisma.inventory.findMany({
+        let parts = await this.prisma.inventory.findMany({
             where,
             orderBy: { partName: 'asc' },
         });
+
+        // Filter lowStock in memory since Prisma doesn't support field-to-field comparison
+        if (lowStock === 'true') {
+            parts = parts.filter(p => p.stockQuantity <= p.minStockLevel);
+        }
+
+        return parts;
     }
 
     async adjustStock(id: string, adjustDto: AdjustStockDto) {

@@ -68,6 +68,7 @@ export class JobCardsService {
                         defectPart: part2AData.defectPart,
                     } : undefined,
                     part1Data: part1Data as any,
+                    part2: items as any, // Store items as part2 JSON for persistence
                     items: items ? {
                         create: items.map(item => ({
                             srNo: item.srNo,
@@ -124,6 +125,76 @@ export class JobCardsService {
 
             if (fileDtos.length > 0) {
                 // Assuming createMany is the correct service method as per previous context
+                await this.filesService.createMany(fileDtos);
+            }
+        }
+
+        return jobCard;
+    }
+
+    async update(id: string, updateJobCardDto: Partial<CreateJobCardDto>) {
+        const existingJobCard = await this.prisma.jobCard.findUnique({
+            where: { id },
+        });
+
+        if (!existingJobCard) {
+            throw new NotFoundException('Job Card not found');
+        }
+
+        const { part2AData, part1Data, uploadedBy, items, ...jobCardData } = updateJobCardDto;
+
+        // Update Job Card
+        const jobCard = await this.prisma.jobCard.update({
+            where: { id },
+            data: {
+                ...(jobCardData.serviceType && { serviceType: jobCardData.serviceType }),
+                ...(jobCardData.priority && { priority: jobCardData.priority }),
+                ...(jobCardData.location && { location: jobCardData.location }),
+                ...(jobCardData.isTemporary !== undefined && { isTemporary: jobCardData.isTemporary }),
+                ...(jobCardData.serviceCenterId && { serviceCenter: { connect: { id: jobCardData.serviceCenterId } } }),
+                ...(jobCardData.customerId && { customer: { connect: { id: jobCardData.customerId } } }),
+                ...(jobCardData.vehicleId && { vehicle: { connect: { id: jobCardData.vehicleId } } }),
+                ...(jobCardData.appointmentId && { appointment: { connect: { id: jobCardData.appointmentId } } }),
+                ...(part2AData && {
+                    part2AData: {
+                        issueDescription: part2AData.issueDescription,
+                        numberOfObservations: part2AData.numberOfObservations,
+                        symptom: part2AData.symptom,
+                        defectPart: part2AData.defectPart,
+                    }
+                }),
+                ...(part1Data && { part1Data: part1Data as any }),
+                ...(items && { items: items as any, part2: items as any }), // Store as both items and part2
+                // Update audit trail
+                ...(uploadedBy && { updatedBy: { connect: { id: uploadedBy } } }),
+            },
+        });
+
+        // Update warranty documentation file metadata if provided
+        if (part2AData?.files) {
+            const fileDtos = [];
+            const files = part2AData.files;
+
+            // Helper to process file array
+            const processFiles = (fileArray: any[], category: FileCategory) => {
+                if (!fileArray) return;
+                fileArray.forEach(file => {
+                    fileDtos.push({
+                        ...file,
+                        category,
+                        relatedEntityId: jobCard.id,
+                        relatedEntityType: RelatedEntityType.JOB_CARD,
+                        uploadedBy: uploadedBy,
+                    });
+                });
+            };
+
+            processFiles(files.videoEvidence, FileCategory.WARRANTY_VIDEO);
+            processFiles(files.vinImage, FileCategory.VEHICLE_VIN_IMAGE);
+            processFiles(files.odoImage, FileCategory.VEHICLE_ODO_IMAGE);
+            processFiles(files.damageImages, FileCategory.VEHICLE_DAMAGE_IMAGE);
+
+            if (fileDtos.length > 0) {
                 await this.filesService.createMany(fileDtos);
             }
         }
