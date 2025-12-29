@@ -311,9 +311,10 @@ model JobCard {
   location           AppointmentLocation @default(STATION)
   serviceType        String
   estimatedCost      Decimal?
-  part1Data          Json?         // Historical snapshot
-  part2AData         Json?         // Warranty case data
-  part3Data          Json?         // Requisition data
+  part1Data          Json?         // Historical snapshot (Part 1 - Customer & Vehicle Info)
+  part2              Json?         // Parts & Work Items List (Part 2 items)
+  part2AData         Json?         // Warranty case data (Part 2A)
+  part3Data          Json?         //Requisition data (Part 3)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 

@@ -72,7 +72,7 @@ export class PartsIssuesService {
                 include: {
                     toServiceCenter: true,
                     requestedBy: true,
-                    items: true
+                    items: true,
                 },
                 orderBy: { createdAt: 'desc' },
             }),
