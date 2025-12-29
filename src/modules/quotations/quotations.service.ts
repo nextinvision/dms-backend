@@ -61,6 +61,8 @@ export class QuotationsService {
             },
             include: {
                 items: true,
+                customer: true,
+                vehicle: true,
             },
         });
     }
