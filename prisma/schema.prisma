@@ -99,7 +99,7 @@ model Customer {
   id                  String    @id @default(uuid())
   customerNumber      String    @unique
   name                String
-  phone               String    @unique
+  phone               String    
   whatsappNumber      String?
   alternateNumber     String?
   email               String?
@@ -751,7 +751,7 @@ model InvoiceItem {
 model File {
   id                String      @id @default(uuid())
   url               String      // Cloudinary secure URL
-  publicId          String      @unique // Cloudinary public ID (for deletion)
+ publicId          String?     @unique // Cloudinary public ID (Now Optional)
   filename          String
   format            String      // jpg, png, pdf, mp4, etc.
   bytes             Int         // File size in bytes
@@ -796,7 +796,7 @@ model Lead {
   leadNumber      String     @unique
   customerId      String?
   customerName    String
-  phone           String
+  phone           String   
   email           String?
   vehicleMake     String?
   vehicleModel    String?
