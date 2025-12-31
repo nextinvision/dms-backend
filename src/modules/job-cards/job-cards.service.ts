@@ -164,7 +164,7 @@ export class JobCardsService {
                     }
                 }),
                 ...(part1Data && { part1Data: part1Data as any }),
-                ...(items && { items: items as any, part2: items as any }), // Store as both items and part2
+                ...(items && { part2: items as any }), // Store items as part2 JSON
                 // Update audit trail
                 ...(uploadedBy && { updatedBy: { connect: { id: uploadedBy } } }),
             },
