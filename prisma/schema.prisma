@@ -330,6 +330,7 @@ model JobCard {
   invoices      Invoice[]
   files         File[]         @relation("JobCardFiles")
   checkInSlips  CheckInSlip[]
+  quotation     Quotation?
 
   @@index([serviceCenterId, status, createdAt])
   @@index([customerId, createdAt])
@@ -641,7 +642,9 @@ model Quotation {
   customer        Customer      @relation(fields: [customerId], references: [id])
   vehicleId       String
   vehicle         Vehicle       @relation(fields: [vehicleId], references: [id])
-  appointmentId   String?
+  appointmentId   String?       @unique
+  jobCardId       String?       @unique
+  jobCard         JobCard?      @relation(fields: [jobCardId], references: [id])
 
   // ✅ NEW: Document Type & Dates
   documentType  String    @default("Quotation") // Quotation or Proforma Invoice

@@ -372,6 +372,7 @@ export class JobCardsService {
                     },
                     createdBy: { select: { id: true, name: true } },
                     updatedBy: { select: { id: true, name: true } },
+                    quotation: true,
                 },
                 orderBy: { createdAt: 'desc' },
             }),
@@ -403,6 +404,7 @@ export class JobCardsService {
                 },
                 createdBy: { select: { id: true, name: true } },
                 updatedBy: { select: { id: true, name: true } },
+                quotation: true,
             },
         });
 
