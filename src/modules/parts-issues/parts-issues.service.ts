@@ -155,41 +155,69 @@ export class PartsIssuesService {
         });
     }
 
-    async approve(id: string, approvedItems: any[]) {
+    // CIM (Central Inventory Manager) approval - first step
+    async approveByCIM(id: string, approvedItems: any[]) {
         const issue = await this.findOne(id);
-        if (issue.status !== 'PENDING_APPROVAL') throw new BadRequestException('Can only approve PENDING_APPROVAL issues');
+        if (issue.status !== 'PENDING_APPROVAL') {
+            throw new BadRequestException('Can only approve PENDING_APPROVAL issues');
+        }
 
         return this.prisma.$transaction(async (tx) => {
+            // Update approved quantities (CIM can adjust quantities)
             for (const appItem of approvedItems) {
                 await tx.partsIssueItem.update({
                     where: { id: appItem.itemId },
                     data: { approvedQty: appItem.approvedQty },
                 });
-
-                // Update Central Inventory
-                // Cast to any to access items safely
-                const originalItem = (issue as any).items.find((i: any) => i.id === appItem.itemId);
-                if (originalItem) {
-                    await tx.centralInventory.update({
-                        where: { id: originalItem.centralInventoryPartId },
-                        data: {
-                            stockQuantity: { decrement: appItem.approvedQty },
-                            allocated: { decrement: originalItem.requestedQty },
-                        },
-                    });
-                }
             }
 
+            // Set status to CIM_APPROVED - waiting for admin approval
+            // Don't decrease stock yet - wait for admin approval
             return tx.partsIssue.update({
                 where: { id },
-                data: { status: 'APPROVED' },
+                data: { status: 'CIM_APPROVED' },
             });
         });
     }
 
+    // Admin approval - second step (required before issuing)
+    async approveByAdmin(id: string) {
+        const issue = await this.findOne(id);
+        if (issue.status !== 'CIM_APPROVED') {
+            throw new BadRequestException('Can only approve CIM_APPROVED issues. Issue must be approved by Central Inventory Manager first.');
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            // Now decrease stock when admin approves (before issuing)
+            const issueItems = (issue as any).items;
+            for (const item of issueItems) {
+                await tx.centralInventory.update({
+                    where: { id: item.centralInventoryPartId },
+                    data: {
+                        stockQuantity: { decrement: item.approvedQty },
+                        allocated: { decrement: item.requestedQty },
+                    },
+                });
+            }
+
+            // Set status to ADMIN_APPROVED - ready to issue
+            return tx.partsIssue.update({
+                where: { id },
+                data: { status: 'ADMIN_APPROVED' },
+            });
+        });
+    }
+
+    // Legacy approve method - kept for backward compatibility, routes to approveByCIM
+    async approve(id: string, approvedItems: any[]) {
+        return this.approveByCIM(id, approvedItems);
+    }
+
     async dispatch(id: string, transportDetails: any) {
         const issue = await this.findOne(id);
-        if (issue.status !== 'APPROVED') throw new BadRequestException('Can only dispatch APPROVED issues');
+        if (issue.status !== 'ADMIN_APPROVED') {
+            throw new BadRequestException('Can only dispatch ADMIN_APPROVED issues. Issue must be approved by admin first.');
+        }
 
         return this.prisma.partsIssue.update({
             where: { id },

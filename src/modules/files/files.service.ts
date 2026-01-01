@@ -1,33 +1,29 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { CreateFileDto, FileCategory, RelatedEntityType } from './dto/create-file.dto';
-import { v2 as cloudinary } from 'cloudinary';
-import { Readable } from 'stream';
+import { CreateFileDto, FileCategory } from './dto/create-file.dto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class FilesService {
-  constructor(private prisma: PrismaService) {
-    // Initialize Cloudinary
-    cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
-    });
-  }
+  constructor(private prisma: PrismaService) {}
 
+  /**
+   * Saves file metadata to the database.
+   * Note: The physical file is already saved to disk by the Controller's Multer interceptor.
+   */
   async createFileMetadata(createFileDto: CreateFileDto) {
-    const isTemp = createFileDto.relatedEntityId.startsWith('TEMP_');
+    const isTemp = createFileDto.relatedEntityId?.startsWith('TEMP_');
 
-    // Prepare foreign keys
+    // Prepare foreign keys for the database relations
     let appointmentId: string | undefined;
     let jobCardId: string | undefined;
     let vehicleId: string | undefined;
     let customerId: string | undefined;
 
-    if (!isTemp) {
+    if (!isTemp && createFileDto.relatedEntityId) {
       const type = createFileDto.relatedEntityType?.toString().toLowerCase();
-      console.log(`[FilesService] Processing File. EntityType: ${type}, ID: ${createFileDto.relatedEntityId}`);
-
+      
       if (type === 'appointment') appointmentId = createFileDto.relatedEntityId;
       else if (type === 'job_card') jobCardId = createFileDto.relatedEntityId;
       else if (type === 'vehicle') vehicleId = createFileDto.relatedEntityId;
@@ -38,20 +34,17 @@ export class FilesService {
       return await this.prisma.file.create({
         data: {
           url: createFileDto.url,
-          publicId: createFileDto.publicId,
           filename: createFileDto.filename,
           format: createFileDto.format,
           bytes: createFileDto.bytes,
-          width: createFileDto.width,
-          height: createFileDto.height,
-          duration: createFileDto.duration,
           category: createFileDto.category,
           relatedEntityId: createFileDto.relatedEntityId,
           relatedEntityType: createFileDto.relatedEntityType,
           uploadedBy: createFileDto.uploadedBy,
           metadata: createFileDto.metadata || {},
-
-          // Map foreign keys
+          publicId: null, // Explicitly null as we no longer use Cloudinary
+          
+          // Map relations
           appointmentId,
           jobCardId,
           vehicleId,
@@ -59,32 +52,7 @@ export class FilesService {
         },
       });
     } catch (error) {
-      if (error.code === 'P2002') {
-        // Unique constraint violation (publicId already exists)
-        // This likely means we are linking a previously uploaded 'temp' file to a real entity
-        // So we update the existing file record
-        try {
-          return await this.prisma.file.update({
-            where: { publicId: createFileDto.publicId },
-            data: {
-              relatedEntityId: createFileDto.relatedEntityId,
-              relatedEntityType: createFileDto.relatedEntityType,
-
-              // Update FKs explicitly
-              appointmentId,
-              jobCardId,
-              vehicleId,
-              customerId,
-            }
-          });
-        } catch (updateError) {
-          console.error('Error updating existing file metadata:', updateError);
-          throw new BadRequestException(`Failed to update existing file: ${updateError.message}`);
-        }
-      }
-
       console.error('Error in createFileMetadata:', error);
-      // Re-throw with more detail for debugging (in development)
       throw new BadRequestException(`Database Error: ${error.message}`);
     }
   }
@@ -95,67 +63,21 @@ export class FilesService {
     );
   }
 
-  // Alias for compatibility with JobCardsService
   async createMany(createFileDtos: CreateFileDto[]) {
     return this.createMultipleFiles(createFileDtos);
   }
 
-  async getFiles(
-    entityType: string,
-    entityId: string,
-    category?: string,
-  ) {
+  async getFiles(entityType: string, entityId: string, category?: string) {
     const where: any = {
       relatedEntityType: entityType,
       relatedEntityId: entityId,
     };
 
-    if (category) {
-      where.category = category;
-    }
+    if (category) where.category = category;
 
     return this.prisma.file.findMany({
       where,
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-  }
-  async uploadAndSave(file: any, body: any) {
-    return new Promise((resolve, reject) => {
-      const upload = cloudinary.uploader.upload_stream(
-        {
-          folder: body.folder || 'dms-uploads',
-          resource_type: 'auto',
-        },
-        async (error, result) => {
-          if (error) return reject(error);
-
-          try {
-            // Save metadata using existing method to handle FKs
-            const dto: CreateFileDto = {
-              url: result.secure_url,
-              publicId: result.public_id,
-              filename: file.originalname,
-              format: result.format || 'unknown',
-              bytes: result.bytes || file.size,
-              width: result.width,
-              height: result.height,
-              duration: result.duration,
-              category: body.category as FileCategory,
-              relatedEntityId: body.entityId,
-              relatedEntityType: body.entityType as RelatedEntityType,
-              uploadedBy: body.uploadedBy,
-              metadata: {},
-            };
-            const saved = await this.createFileMetadata(dto);
-            resolve(saved);
-          } catch (err) {
-            reject(err);
-          }
-        }
-      );
-      Readable.from(file.buffer).pipe(upload);
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -170,16 +92,12 @@ export class FilesService {
     actualEntityId: string,
     entityType: string,
   ) {
-    // Prepare update data including FKs
     const updateData: any = {
       relatedEntityId: actualEntityId,
       relatedEntityType: entityType,
     };
 
-    // Set FKs
     const type = entityType?.toString().toLowerCase();
-    console.log(`[FilesService] Updating Association. Type: ${type}, ActualID: ${actualEntityId}`);
-
     if (type === 'appointment') updateData.appointmentId = actualEntityId;
     else if (type === 'job_card') updateData.jobCardId = actualEntityId;
     else if (type === 'vehicle') updateData.vehicleId = actualEntityId;
@@ -194,15 +112,16 @@ export class FilesService {
     });
   }
 
+  // --- DELETE LOGIC (UPDATED FOR LOCAL DISK) ---
+  
   async deleteFile(id: string) {
     const file = await this.prisma.file.findUnique({ where: { id } });
     if (!file) throw new NotFoundException('File not found');
 
-    // Delete from Cloudinary
-    if (file.publicId) {
-      await cloudinary.uploader.destroy(file.publicId);
-    }
+    // Delete the physical file from the VPS disk
+    this.deleteFromDisk(file.url);
 
+    // Delete the record from the database
     return this.prisma.file.delete({ where: { id } });
   }
 
@@ -211,12 +130,7 @@ export class FilesService {
       where: { relatedEntityType: entityType, relatedEntityId: entityId },
     });
 
-    // Delete from Cloudinary
-    for (const file of files) {
-      if (file.publicId) {
-        await cloudinary.uploader.destroy(file.publicId);
-      }
-    }
+    files.forEach(file => this.deleteFromDisk(file.url));
 
     return this.prisma.file.deleteMany({
       where: { relatedEntityType: entityType, relatedEntityId: entityId },
@@ -228,15 +142,34 @@ export class FilesService {
       where: { relatedEntityType: entityType, relatedEntityId: entityId, category: category as FileCategory },
     });
 
-    // Delete from Cloudinary
-    for (const file of files) {
-      if (file.publicId) {
-        await cloudinary.uploader.destroy(file.publicId);
-      }
-    }
+    files.forEach(file => this.deleteFromDisk(file.url));
 
     return this.prisma.file.deleteMany({
       where: { relatedEntityType: entityType, relatedEntityId: entityId, category: category as FileCategory },
     });
+  }
+
+  /**
+   * Helper: Deletes a physical file from the VPS based on its URL
+   */
+  private deleteFromDisk(fileUrl: string) {
+    try {
+      // Determine base directory based on environment (Dev vs Prod)
+      const isDev = __dirname.includes('dms-dev');
+      const baseDir = isDev 
+          ? '/home/fortytwoev/dms-data/uploads/dev' 
+          : '/home/fortytwoev/dms-data/uploads/prod';
+
+      // Extract filename from URL (e.g., /uploads/file-123.jpg -> file-123.jpg)
+      const fileName = fileUrl.split('/').pop();
+      if (fileName) {
+        const filePath = path.join(baseDir, fileName);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to delete local file: ${fileUrl}`, err);
+    }
   }
 }

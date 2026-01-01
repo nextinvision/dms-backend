@@ -13,27 +13,75 @@ import {
   HttpCode,
   HttpStatus,
   ParseArrayPipe,
+  HttpException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FilesService } from './files.service';
 import { CreateFileDto } from './dto/create-file.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Express } from 'express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import * as fs from 'fs';
 
 @Controller('files')
 @UseGuards(JwtAuthGuard)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) { }
+  constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          // 1. Detect Environment (Dev vs Prod)
+          // We check if the current directory path contains 'dms-dev'
+          const isDev = __dirname.includes('dms-dev');
+
+          const uploadPath = isDev
+            ? '/home/fortytwoev/dms-data/uploads/dev'
+            : '/home/fortytwoev/dms-data/uploads/prod';
+
+          // 2. Ensure folder exists before saving
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+          }
+
+          cb(null, uploadPath);
+        },
+        filename: (req, file, cb) => {
+          // 3. Generate Unique Filename (random-number.ext)
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          cb(null, `file-${uniqueSuffix}${ext}`);
+        },
+      }),
+    }),
+  )
   @HttpCode(HttpStatus.CREATED)
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: any,
   ) {
-    return this.filesService.uploadAndSave(file, body);
+    if (!file) {
+      throw new HttpException('File not provided', HttpStatus.BAD_REQUEST);
+    }
+
+    // 4. Construct the Public URL
+    // Nginx is configured to map /uploads/ -> ~/dms-data/uploads/...
+    const publicUrl = `/uploads/${file.filename}`;
+
+    // Return the data your Frontend expects
+    return {
+      url: publicUrl,
+      filename: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+    };
   }
+
+  // --- EXISTING METHODS (KEPT AS IS) ---
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -44,9 +92,13 @@ export class FilesController {
   @Post('bulk')
   @HttpCode(HttpStatus.CREATED)
   async createMultipleFiles(
-    @Body(new ParseArrayPipe({ items: CreateFileDto })) createFileDtos: CreateFileDto[],
+    @Body(new ParseArrayPipe({ items: CreateFileDto }))
+    createFileDtos: CreateFileDto[],
   ) {
-    console.log('Received bulk create request:', JSON.stringify(createFileDtos));
+    console.log(
+      'Received bulk create request:',
+      JSON.stringify(createFileDtos),
+    );
     return this.filesService.createMultipleFiles(createFileDtos);
   }
 
@@ -56,12 +108,13 @@ export class FilesController {
     @Query('entityId') entityId?: string,
     @Query('category') category?: string,
   ) {
-    // If no filters provided, return empty array or all files based on requirements
     if (!entityType && !entityId) {
       return [];
     }
     if (!entityType || !entityId) {
-      throw new Error('Both entityType and entityId are required when filtering');
+      throw new Error(
+        'Both entityType and entityId are required when filtering',
+      );
     }
     return this.filesService.getFiles(entityType, entityId, category);
   }
@@ -74,7 +127,8 @@ export class FilesController {
   @Patch('update-entity')
   @HttpCode(HttpStatus.OK)
   async updateEntityAssociation(
-    @Body() body: { tempEntityId: string; actualEntityId: string; entityType: string },
+    @Body()
+    body: { tempEntityId: string; actualEntityId: string; entityType: string },
   ) {
     return this.filesService.updateEntityAssociation(
       body.tempEntityId,
@@ -105,7 +159,10 @@ export class FilesController {
     @Param('entityId') entityId: string,
     @Param('category') category: string,
   ) {
-    return this.filesService.deleteFilesByCategory(entityType, entityId, category);
+    return this.filesService.deleteFilesByCategory(
+      entityType,
+      entityId,
+      category,
+    );
   }
 }
-

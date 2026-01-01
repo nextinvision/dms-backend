@@ -18,7 +18,7 @@ export class CentralInventoryController {
     constructor(private readonly centralInventoryService: CentralInventoryService) { }
 
     @Get()
-    @Roles('admin', 'central_inventory_manager')
+    @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     findAll(@Query() query: any) {
         return this.centralInventoryService.findAll(query);
     }
@@ -30,7 +30,7 @@ export class CentralInventoryController {
     }
 
     @Get(':id')
-    @Roles('admin', 'central_inventory_manager')
+    @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     findOne(@Param('id') id: string) {
         return this.centralInventoryService.findOne(id);
     }

@@ -20,31 +20,31 @@ export class PurchaseOrdersController {
     constructor(private readonly poService: PurchaseOrdersService) { }
 
     @Post()
-    @Roles('admin', 'central_inventory_manager')
+    @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     create(@Body() createDto: CreatePurchaseOrderDto) {
         return this.poService.create(createDto);
     }
 
     @Get()
-    @Roles('admin', 'central_inventory_manager')
+    @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     findAll(@Query() query: any) {
         return this.poService.findAll(query);
     }
 
     @Get(':id')
-    @Roles('admin', 'central_inventory_manager')
+    @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     findOne(@Param('id') id: string) {
         return this.poService.findOne(id);
     }
 
     @Patch(':id/submit')
-    @Roles('admin', 'central_inventory_manager')
+    @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     submit(@Param('id') id: string) {
         return this.poService.submit(id);
     }
 
     @Patch(':id/approve')
-    @Roles('admin')
+    @Roles('admin', 'central_inventory_manager')
     approve(@Param('id') id: string) {
         return this.poService.approve(id);
     }

@@ -9,77 +9,79 @@ datasource db {
 
 // Auth & Multi-Tenancy
 model ServiceCenter {
-  id          String   @id @default(uuid())
-  name        String
-  code        String   @unique
-  address     String?
-  city        String?
-  state       String?
-  pinCode     String?
-  phone       String?
-  email       String?
+  id      String  @id @default(uuid())
+  name    String
+  code    String  @unique
+  address String?
+  city    String?
+  state   String?
+  pinCode String?
+  phone   String?
+  email   String?
 
   // Operational Config
-  capacity                Int?
-  technicianCount         Int?
-  serviceRadius           Decimal?
-  homeServiceEnabled      Boolean  @default(false)
-  maxAppointmentsPerDay   Int?
+  capacity              Int?
+  technicianCount       Int?
+  serviceRadius         Decimal?
+  homeServiceEnabled    Boolean  @default(false)
+  maxAppointmentsPerDay Int?
 
   // Financial Setup
-  invoicePrefix           String?
-  bankName                String?
-  bankAccount             String?
-  bankIFSC                String?
-  gstNumber               String?
-  panNumber               String?
+  invoicePrefix String?
+  bankName      String?
+  bankAccount   String?
+  bankIFSC      String?
+  gstNumber     String?
+  panNumber     String?
 
   // Service Capabilities
-  serviceTypes            String[]
+  serviceTypes String[]
 
   // Status
-  status                  String   @default("Active")
+  status String @default("Active")
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  users       User[]
-  customers   Customer[] @relation("LastServiceCenter")
-  jobCards    JobCard[]
-  inventory   Inventory[]
-  partsIssues PartsIssue[]
-  appointments Appointment[]
-  invoices     Invoice[]
-  quotations   Quotation[]
+  users          User[]
+  customers      Customer[]      @relation("LastServiceCenter")
+  jobCards       JobCard[]
+  inventory      Inventory[]
+  partsIssues    PartsIssue[]
+  appointments   Appointment[]
+  invoices       Invoice[]
+  quotations     Quotation[]
+  purchaseOrders PurchaseOrder[] @relation("ServiceCenterPurchaseOrders")
 }
 
 model User {
-  id               String         @id @default(uuid())
-  email            String         @unique
-  password         String
-  name             String
-  role             UserRole       @default(service_engineer)
-  serviceCenterId  String?
-  serviceCenter    ServiceCenter? @relation(fields: [serviceCenterId], references: [id], onDelete: SetNull)
-  phone            String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id              String         @id @default(uuid())
+  email           String         @unique
+  password        String
+  name            String
+  role            UserRole       @default(service_engineer)
+  serviceCenterId String?
+  serviceCenter   ServiceCenter? @relation(fields: [serviceCenterId], references: [id], onDelete: SetNull)
+  phone           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  jobCards         JobCard[]      @relation("AssignedEngineer")
-  requestedIssues  PartsIssue[]   @relation("RequestedBy")
-  managerReviews   JobCard[]      @relation("ManagerReview") 
+  jobCards                JobCard[]       @relation("AssignedEngineer")
+  requestedIssues         PartsIssue[]    @relation("RequestedBy")
+  managerReviews          JobCard[]       @relation("ManagerReview")
+  purchaseOrdersRequested PurchaseOrder[] @relation("PurchaseOrderRequestedBy")
 
   // Audit trail relations - records created by this user
-  customersCreated     Customer[]     @relation("CustomerCreatedBy")
-  customersUpdated     Customer[]     @relation("CustomerUpdatedBy")
-  appointmentsCreated  Appointment[]  @relation("AppointmentCreatedBy")
-  appointmentsUpdated  Appointment[]  @relation("AppointmentUpdatedBy")
-  jobCardsCreated      JobCard[]      @relation("JobCardCreatedBy")
-  jobCardsUpdated      JobCard[]      @relation("JobCardUpdatedBy")
-  quotationsCreated    Quotation[]    @relation("QuotationCreatedBy")
-  quotationsUpdated    Quotation[]    @relation("QuotationUpdatedBy")
-  invoicesCreated      Invoice[]      @relation("InvoiceCreatedBy")
-  invoicesUpdated      Invoice[]      @relation("InvoiceUpdatedBy")
+  customersCreated    Customer[]    @relation("CustomerCreatedBy")
+  customersUpdated    Customer[]    @relation("CustomerUpdatedBy")
+  appointmentsCreated Appointment[] @relation("AppointmentCreatedBy")
+  appointmentsUpdated Appointment[] @relation("AppointmentUpdatedBy")
+  jobCardsCreated     JobCard[]     @relation("JobCardCreatedBy")
+  jobCardsUpdated     JobCard[]     @relation("JobCardUpdatedBy")
+  quotationsCreated   Quotation[]   @relation("QuotationCreatedBy")
+  quotationsUpdated   Quotation[]   @relation("QuotationUpdatedBy")
+  invoicesCreated     Invoice[]     @relation("InvoiceCreatedBy")
+  invoicesUpdated     Invoice[]     @relation("InvoiceUpdatedBy")
 
   @@index([serviceCenterId])
 }
@@ -96,38 +98,38 @@ enum UserRole {
 
 // Customer
 model Customer {
-  id                  String    @id @default(uuid())
-  customerNumber      String    @unique
+  id                  String         @id @default(uuid())
+  customerNumber      String         @unique
   name                String
-  phone               String    @unique
+  phone               String
   whatsappNumber      String?
   alternateNumber     String?
   email               String?
   address             String?
   cityState           String?
   pincode             String?
-  customerType        String?   @default("B2C")
+  customerType        String?        @default("B2C")
   lastServiceCenterId String?
   lastServiceCenter   ServiceCenter? @relation("LastServiceCenter", fields: [lastServiceCenterId], references: [id])
   lastServiceDate     DateTime?
   lastInvoiceNumber   String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
   deletedAt           DateTime?
-  
+
   // Audit trail
-  createdById         String?
-  createdBy           User?     @relation("CustomerCreatedBy", fields: [createdById], references: [id])
-  updatedById         String?
-  updatedBy           User?     @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
-  
-  vehicles      Vehicle[]
-  appointments  Appointment[]
-  jobCards      JobCard[]
-  quotations    Quotation[]
-  invoices      Invoice[]
-  files         File[]        @relation("CustomerFiles")
-  
+  createdById String?
+  createdBy   User?   @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
+
+  vehicles     Vehicle[]
+  appointments Appointment[]
+  jobCards     JobCard[]
+  quotations   Quotation[]
+  invoices     Invoice[]
+  files        File[]        @relation("CustomerFiles")
+
   @@index([phone])
   @@index([customerNumber])
   @@index([createdById])
@@ -136,11 +138,11 @@ model Customer {
 
 // Vehicle
 model Vehicle {
-  id                   String    @id @default(uuid())
+  id                   String        @id @default(uuid())
   customerId           String
-  customer             Customer  @relation(fields: [customerId], references: [id])
-  registration         String    @unique
-  vin                  String    @unique
+  customer             Customer      @relation(fields: [customerId], references: [id])
+  registration         String        @unique
+  vin                  String        @unique
   vehicleMake          String
   vehicleModel         String
   vehicleYear          Int
@@ -158,16 +160,16 @@ model Vehicle {
   lastServiceDate      DateTime?
   lastServiceCenterId  String?
   nextServiceDate      DateTime?
-  totalServices        Int       @default(0)
-  totalSpent           Decimal   @default(0)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  
-  appointments  Appointment[]
-  jobCards      JobCard[]
-  quotations    Quotation[]
-  invoices      Invoice[]
-  files         File[]        @relation("VehicleFiles")
+  totalServices        Int           @default(0)
+  totalSpent           Decimal       @default(0)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  appointments Appointment[]
+  jobCards     JobCard[]
+  quotations   Quotation[]
+  invoices     Invoice[]
+  files        File[]        @relation("VehicleFiles")
 
   @@index([customerId])
   @@index([registration])
@@ -181,33 +183,33 @@ enum VehicleStatus {
 
 // Appointment
 model Appointment {
-  id                 String            @id @default(uuid())
-  appointmentNumber  String            @unique
-  customerId         String
-  customer           Customer          @relation(fields: [customerId], references: [id])
-  vehicleId          String
-  vehicle            Vehicle           @relation(fields: [vehicleId], references: [id])
-  serviceCenterId    String
-  serviceCenter      ServiceCenter     @relation(fields: [serviceCenterId], references: [id])
-  
+  id                String        @id @default(uuid())
+  appointmentNumber String        @unique
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  vehicleId         String
+  vehicle           Vehicle       @relation(fields: [vehicleId], references: [id])
+  serviceCenterId   String
+  serviceCenter     ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+
   // Basic Appointment Info
-  serviceType        String
-  appointmentDate    DateTime
-  appointmentTime    String
-  duration           String?           // Estimated duration in hours
-  status             AppointmentStatus @default(PENDING)
-  
+  serviceType     String
+  appointmentDate DateTime
+  appointmentTime String
+  duration        String? // Estimated duration in hours
+  status          AppointmentStatus @default(PENDING)
+
   // Service Details
-  customerComplaint  String?
+  customerComplaint      String?
   previousServiceHistory String?
-  estimatedServiceTime String?
-  estimatedCost      Decimal?
-  odometerReading    String?           // Odometer at appointment time (changes over time)
-  estimatedDeliveryDate DateTime?
-  
+  estimatedServiceTime   String?
+  estimatedCost          Decimal?
+  odometerReading        String? // Odometer at appointment time (changes over time)
+  estimatedDeliveryDate  DateTime?
+
   // Location & Pickup/Drop
   location           AppointmentLocation @default(STATION)
-  pickupDropRequired Boolean           @default(false)
+  pickupDropRequired Boolean             @default(false)
   pickupAddress      String?
   pickupState        String?
   pickupCity         String?
@@ -216,35 +218,35 @@ model Appointment {
   dropState          String?
   dropCity           String?
   dropPincode        String?
-  
+
   // Staff Assignment
-  assignedServiceAdvisor String?       // User name or ID
-  assignedTechnician String?           // User name or ID
-  
+  assignedServiceAdvisor String? // User name or ID
+  assignedTechnician     String? // User name or ID
+
   // Communication Preferences
-  preferredCommunicationMode String?   // Phone, Email, SMS, WhatsApp
-  
+  preferredCommunicationMode String? // Phone, Email, SMS, WhatsApp
+
   // Check-in/Arrival Fields
-  arrivalMode        String?           // vehicle_present, vehicle_absent, check_in_only
-  checkInNotes       String?
-  checkInSlipNumber  String?
-  checkInDate        DateTime?
-  checkInTime        String?
-  customerArrived    Boolean           @default(false)
-  
+  arrivalMode       String? // vehicle_present, vehicle_absent, check_in_only
+  checkInNotes      String?
+  checkInSlipNumber String?
+  checkInDate       DateTime?
+  checkInTime       String?
+  customerArrived   Boolean   @default(false)
+
   // Timestamps
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Audit trail
-  createdById        String?
-  createdBy          User?             @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
-  updatedById        String?
-  updatedBy          User?             @relation("AppointmentUpdatedBy", fields: [updatedById], references: [id])
-  
+  createdById String?
+  createdBy   User?   @relation("AppointmentCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("AppointmentUpdatedBy", fields: [updatedById], references: [id])
+
   // Relations
-  jobCards           JobCard[]
-  files              File[]            @relation("AppointmentFiles")
+  jobCards JobCard[]
+  files    File[]    @relation("AppointmentFiles")
 
   @@index([serviceCenterId])
   @@index([customerId])
@@ -271,7 +273,6 @@ enum AppointmentStatus {
   SENT_TO_MANAGER
 }
 
-
 // JobCard
 model JobCard {
   id                 String        @id @default(uuid())
@@ -286,51 +287,50 @@ model JobCard {
   assignedEngineer   User?         @relation("AssignedEngineer", fields: [assignedEngineerId], references: [id])
   appointmentId      String?
   appointment        Appointment?  @relation(fields: [appointmentId], references: [id])
-  
+
   // ✅ NEW: Temp vs Actual Job Card Fields
-  isTemporary        Boolean       @default(true)
-  convertedToFinal   Boolean       @default(false)
-  finalJobCardId     String?
-  finalJobCard       JobCard?      @relation("TempToFinal", fields: [finalJobCardId], references: [id])
-  tempJobCards       JobCard[]     @relation("TempToFinal")
-  
+  isTemporary      Boolean   @default(true)
+  convertedToFinal Boolean   @default(false)
+  finalJobCardId   String?
+  finalJobCard     JobCard?  @relation("TempToFinal", fields: [finalJobCardId], references: [id])
+  tempJobCards     JobCard[] @relation("TempToFinal")
+
   // ✅ NEW: Manager Approval Workflow Fields
-  passedToManager    Boolean       @default(false)
-  passedToManagerAt  DateTime?
-  managerId          String?
-  manager            User?         @relation("ManagerReview", fields: [managerId], references: [id])
-  managerReviewStatus String?      // PENDING, APPROVED, REJECTED
-  managerReviewNotes String?
-  managerReviewedAt  DateTime?
-  
+  passedToManager     Boolean   @default(false)
+  passedToManagerAt   DateTime?
+  managerId           String?
+  manager             User?     @relation("ManagerReview", fields: [managerId], references: [id])
+  managerReviewStatus String? // PENDING, APPROVED, REJECTED
+  managerReviewNotes  String?
+  managerReviewedAt   DateTime?
+
   // ✅ NEW: Lead Integration
-  leadId             String?
-  
-  status             JobCardStatus @default(CREATED)
-  priority           JobCardPriority @default(NORMAL)
-  location           AppointmentLocation @default(STATION)
-  serviceType        String
-  estimatedCost      Decimal?
-  part1Data          Json?         // Historical snapshot (Part 1 - Customer & Vehicle Info)
-  part2              Json?         // Parts & Work Items List (Part 2 items)
-  part2AData         Json?         // Warranty case data (Part 2A)
-  part3Data          Json?         //Requisition data (Part 3)
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  leadId String?
+
+  status        JobCardStatus       @default(CREATED)
+  priority      JobCardPriority     @default(NORMAL)
+  location      AppointmentLocation @default(STATION)
+  serviceType   String
+  estimatedCost Decimal?
+  part1Data     Json? // Historical snapshot (Part 1 - Customer & Vehicle Info)
+  part2         Json? // Parts & Work Items List (Part 2 items)
+  part2AData    Json? // Warranty case data (Part 2A)
+  part3Data     Json? //Requisition data (Part 3)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   // Audit trail
-  createdById        String?
-  createdBy          User?         @relation("JobCardCreatedBy", fields: [createdById], references: [id])
-  updatedById        String?
-  updatedBy          User?         @relation("JobCardUpdatedBy", fields: [updatedById], references: [id])
-  
+  createdById String?
+  createdBy   User?   @relation("JobCardCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("JobCardUpdatedBy", fields: [updatedById], references: [id])
+
   items         JobCardItem[]
   partsRequests PartsRequest[]
   invoices      Invoice[]
-  files         File[]        @relation("JobCardFiles")
+  files         File[]         @relation("JobCardFiles")
   checkInSlips  CheckInSlip[]
 
-  
   @@index([serviceCenterId, status, createdAt])
   @@index([customerId, createdAt])
   @@index([vehicleId, createdAt])
@@ -340,7 +340,6 @@ model JobCard {
   @@index([createdById])
   @@index([updatedById])
 }
-
 
 enum JobCardStatus {
   ARRIVAL_PENDING
@@ -367,35 +366,35 @@ enum JobCardPriority {
 
 // JobCardItem
 model JobCardItem {
-  id              String   @id @default(uuid())
+  id              String  @id @default(uuid())
   jobCardId       String
-  jobCard         JobCard  @relation(fields: [jobCardId], references: [id])
+  jobCard         JobCard @relation(fields: [jobCardId], references: [id])
   srNo            Int
-  partWarrantyTag Boolean  @default(false)
+  partWarrantyTag Boolean @default(false)
   partName        String
   partCode        String
   qty             Int
   amount          Decimal
   technician      String?
   labourCode      String?
-  itemType        String   // "part" | "work_item"
+  itemType        String // "part" | "work_item"
   serialNumber    String?
-  isWarranty      Boolean  @default(false)
-  
+  isWarranty      Boolean @default(false)
+
   @@index([jobCardId])
 }
 
 // Parts Request
 model PartsRequest {
-  id              String             @id @default(uuid())
-  jobCardId       String
-  jobCard         JobCard            @relation(fields: [jobCardId], references: [id])
-  status          PartsRequestStatus @default(PENDING)
-  urgency         JobCardPriority    @default(NORMAL)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id        String             @id @default(uuid())
+  jobCardId String
+  jobCard   JobCard            @relation(fields: [jobCardId], references: [id])
+  status    PartsRequestStatus @default(PENDING)
+  urgency   JobCardPriority    @default(NORMAL)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
-  items           PartsRequestItem[]
+  items PartsRequestItem[]
 
   @@index([jobCardId])
 }
@@ -422,58 +421,60 @@ model PartsRequestItem {
 
 // Inventory (Service Center) - Part Master
 model Inventory {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   serviceCenterId String
   serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  
+
   // Basic Part Information
-  oemPartNumber   String?  // OEM Part Number (e.g., 2W_000000000272_003)
-  partName        String   // Part Name (e.g., COCKPIT TOP SHELL ANTHRACITE)
-  partNumber      String   // Internal Part Number (e.g., _003)
-  originType      String?  // OLD/NEW
-  category        String   // Category (e.g., BODY PANEL)
-  description     String?  // Description
-  
+  oemPartNumber String? // OEM Part Number (e.g., 2W_000000000272_003)
+  partName      String // Part Name (e.g., COCKPIT TOP SHELL ANTHRACITE)
+  partNumber    String // Internal Part Number (e.g., _003)
+  originType    String? // OLD/NEW
+  category      String // Category (e.g., BODY PANEL)
+  description   String? // Description
+
   // Stock Information
-  stockQuantity   Int
-  minStockLevel   Int
-  maxStockLevel   Int
-  unit            String?  // Unit of measurement
-  location        String?  // Storage location
-  
+  stockQuantity Int
+  minStockLevel Int
+  maxStockLevel Int
+  unit          String? // Unit of measurement
+  location      String? // Storage location
+
   // Part Details
-  brandName       String?  // Brand Name (e.g., OLA ELECTRIC)
-  variant         String?  // Variant (e.g., S1 PRO, S1)
-  partType        String?  // Part Type (e.g., PANEL)
-  color           String?  // Color (e.g., ANTHRACITE)
-  
+  brandName String? // Brand Name (e.g., OLA ELECTRIC)
+  variant   String? // Variant (e.g., S1 PRO, S1)
+  partType  String? // Part Type (e.g., PANEL)
+  color     String? // Color (e.g., ANTHRACITE)
+
   // Pricing - Purchase
-  costPrice       Decimal  // Purchase Price (e.g., 950)
-  pricePreGst     Decimal? // Pre GST Amount To Us (e.g., 1400)
-  gstRateInput    Decimal? // GST Rate Input % (e.g., 18)
-  gstInput        Decimal? // GST Input Amount
-  
+  costPrice    Decimal // Purchase Price (e.g., 950)
+  pricePreGst  Decimal? // Pre GST Amount To Us (e.g., 1400)
+  gstRateInput Decimal? // GST Rate Input % (e.g., 18)
+  gstInput     Decimal? // GST Input Amount
+
   // Pricing - Sale
-  unitPrice       Decimal  // Sale Price Pre GST (e.g., 1652)
-  gstRate         Int      // GST Rate Output % (e.g., 18)
-  gstRateOutput   Decimal? // GST Rate Output Amount (e.g., 252)
-  totalPrice      Decimal? // Total Price including GST (e.g., 1864.4)
-  totalGst        Decimal? // Total GST Amount (e.g., 284.4)
-  
+  unitPrice     Decimal // Sale Price Pre GST (e.g., 1652)
+  gstRate       Int // GST Rate Output % (e.g., 18)
+  gstRateOutput Decimal? // GST Rate Output Amount (e.g., 252)
+  totalPrice    Decimal? // Total Price including GST (e.g., 1864.4)
+  totalGst      Decimal? // Total GST Amount (e.g., 284.4)
+
   // Labour Information
-  labourName      String?  // Associated Labour Name (e.g., TOP COCKIT FITTING)
-  labourCode      String?  // Associated Labour Code (e.g., LB_000000000121)
-  labourWorkTime  String?  // Work Time (e.g., 0.3M)
-  labourRate      Decimal? // Labour Rate (e.g., 180)
-  labourGstRate   Decimal? // Labour GST Rate % (e.g., 18)
-  labourPrice     Decimal? // Labour Price including GST (e.g., 212.4)
-  
+  labourName     String? // Associated Labour Name (e.g., TOP COCKIT FITTING)
+  labourCode     String? // Associated Labour Code (e.g., LB_000000000121)
+  labourWorkTime String? // Work Time (e.g., 0.3M)
+  labourRate     Decimal? // Labour Rate (e.g., 180)
+  labourGstRate  Decimal? // Labour GST Rate % (e.g., 18)
+  labourPrice    Decimal? // Labour Price including GST (e.g., 212.4)
+
   // Flags
-  highValuePart   Boolean  @default(false) // High Value Part (YES/NO)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  highValuePart Boolean @default(false) // High Value Part (YES/NO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrderItems POItem[]
+
   @@index([serviceCenterId, stockQuantity])
   @@index([partNumber])
   @@index([oemPartNumber])
@@ -489,12 +490,12 @@ model CentralInventory {
   costPrice     Decimal
   gstRate       Int
   stockQuantity Int
-  allocated     Int      @default(0)  // In pending issues
-  available     Int      // Computed in logic
+  allocated     Int      @default(0) // In pending issues
+  available     Int // Computed in logic
   minStockLevel Int
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+
   @@index([partNumber])
 }
 
@@ -514,25 +515,31 @@ model Supplier {
 
 // Purchase Order
 model PurchaseOrder {
-  id                    String   @id @default(uuid())
-  poNumber              String   @unique
-  supplierId            String
-  supplier              Supplier @relation(fields: [supplierId], references: [id])
-  status                POStatus @default(DRAFT)
-  orderDate             DateTime
-  expectedDeliveryDate  DateTime?
-  receivedDate          DateTime?
-  subtotal              Decimal
-  cgst                  Decimal
-  sgst                  Decimal
-  totalAmount           Decimal
-  paymentTerms          String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  
+  id                   String         @id @default(uuid())
+  poNumber             String         @unique
+  supplierId           String?
+  supplier             Supplier?      @relation(fields: [supplierId], references: [id])
+  fromServiceCenterId  String?
+  fromServiceCenter    ServiceCenter? @relation("ServiceCenterPurchaseOrders", fields: [fromServiceCenterId], references: [id])
+  requestedById        String?
+  requestedBy          User?          @relation("PurchaseOrderRequestedBy", fields: [requestedById], references: [id])
+  status               POStatus       @default(DRAFT)
+  orderDate            DateTime
+  expectedDeliveryDate DateTime?
+  receivedDate         DateTime?
+  subtotal             Decimal
+  cgst                 Decimal
+  sgst                 Decimal
+  totalAmount          Decimal
+  paymentTerms         String?
+  orderNotes           String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
   items POItem[]
-  
+
   @@index([status])
+  @@index([fromServiceCenterId])
 }
 
 enum POStatus {
@@ -547,45 +554,69 @@ enum POStatus {
 
 model POItem {
   id                     String        @id @default(uuid())
-  purchaseOrderId       String
-  purchaseOrder         PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
-  centralInventoryPartId String
+  purchaseOrderId        String
+  purchaseOrder          PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  centralInventoryPartId String?
+  inventoryPartId        String? // Service Center Inventory Part ID
+  inventoryPart          Inventory?    @relation(fields: [inventoryPartId], references: [id])
+  
+  // Part Information (stored for reference)
+  partName               String? // Part name for display
+  partNumber             String? // Internal Part Number
+  oemPartNumber          String? // OEM Part Number
+  category               String? // Category
+  originType             String? // OLD/NEW
+  description            String? // Description
+  brandName              String? // Brand Name
+  variant                String? // Variant
+  partType               String? // Part Type
+  color                  String? // Color
+  unit                   String? // Unit of measurement
+  
+  // Quantity and Pricing
   quantity               Int
   receivedQty            Int           @default(0)
   unitPrice              Decimal
   gstRate                Int
+  
+  // Additional Information
+  urgency                String? // low, medium, high
+  notes                  String? // Part-specific notes
 
   @@index([purchaseOrderId])
+  @@index([inventoryPartId])
 }
 
 // Parts Issue (Central → SC)
 model PartsIssue {
-  id                  String    @id @default(uuid())
-  issueNumber         String    @unique
-  toServiceCenterId   String
-  toServiceCenter     ServiceCenter @relation(fields: [toServiceCenterId], references: [id])
-  requestedById       String
-  requestedBy         User      @relation("RequestedBy", fields: [requestedById], references: [id])
-  status              IssueStatus @default(PENDING_APPROVAL)
-  priority            JobCardPriority @default(NORMAL)
-  dispatchedDate      DateTime?
-  receivedDate        DateTime?
-  transportDetails    Json?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  
+  id                String          @id @default(uuid())
+  issueNumber       String          @unique
+  toServiceCenterId String
+  toServiceCenter   ServiceCenter   @relation(fields: [toServiceCenterId], references: [id])
+  requestedById     String
+  requestedBy       User            @relation("RequestedBy", fields: [requestedById], references: [id])
+  status            IssueStatus     @default(PENDING_APPROVAL)
+  priority          JobCardPriority @default(NORMAL)
+  dispatchedDate    DateTime?
+  receivedDate      DateTime?
+  transportDetails  Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
   items PartsIssueItem[]
-  
+
   @@index([toServiceCenterId])
   @@index([status])
 }
 
 enum IssueStatus {
-  PENDING_APPROVAL
-  APPROVED
-  DISPATCHED
-  COMPLETED
-  REJECTED
+  PENDING_APPROVAL      // Initial status when created by SC inventory manager
+  CIM_APPROVED          // Approved by Central Inventory Manager
+  PENDING_ADMIN_APPROVAL // Waiting for admin approval before issuing
+  ADMIN_APPROVED        // Approved by admin, ready to issue
+  DISPATCHED            // Parts dispatched to service center
+  COMPLETED             // Parts received by service center
+  REJECTED              // Rejected by CIM or Admin
 }
 
 model PartsIssueItem {
@@ -602,62 +633,62 @@ model PartsIssueItem {
 
 // Quotation
 model Quotation {
-  id                String   @id @default(uuid())
-  quotationNumber   String   @unique
-  serviceCenterId   String
-  serviceCenter     ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  customerId        String
-  customer          Customer @relation(fields: [customerId], references: [id])
-  vehicleId         String
-  vehicle           Vehicle  @relation(fields: [vehicleId], references: [id])
-  appointmentId     String?
-  
+  id              String        @id @default(uuid())
+  quotationNumber String        @unique
+  serviceCenterId String
+  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  vehicleId       String
+  vehicle         Vehicle       @relation(fields: [vehicleId], references: [id])
+  appointmentId   String?
+
   // ✅ NEW: Document Type & Dates
-  documentType      String   @default("Quotation")  // Quotation or Proforma Invoice
-  quotationDate     DateTime @default(now())
-  validUntil        DateTime?
-  
+  documentType  String    @default("Quotation") // Quotation or Proforma Invoice
+  quotationDate DateTime  @default(now())
+  validUntil    DateTime?
+
   // ✅ NEW: Insurance Information
-  hasInsurance      Boolean  @default(false)
-  insurerId         String?
+  hasInsurance       Boolean   @default(false)
+  insurerId          String?
   insuranceStartDate DateTime?
-  insuranceEndDate  DateTime?
-  
+  insuranceEndDate   DateTime?
+
   // ✅ NEW: Additional Information
   batterySerialNumber String?
-  customNotes       String?
-  noteTemplateId    String?
-  
+  customNotes         String?
+  noteTemplateId      String?
+
   // ✅ NEW: Manager Approval (for quotations)
-  passedToManager   Boolean  @default(false)
+  passedToManager   Boolean   @default(false)
   passedToManagerAt DateTime?
   managerId         String?
-  
+
   // ✅ NEW: Customer Approval Tracking
-  customerApprovalStatus String? @default("PENDING")  // PENDING, APPROVED, REJECTED
-  customerApprovedAt     DateTime?
+  customerApprovalStatus  String?   @default("PENDING") // PENDING, APPROVED, REJECTED
+  customerApprovedAt      DateTime?
   customerRejectionReason String?
-  approvalHistory   Json?
-  
+  approvalHistory         Json?
+
   // ✅ NEW: Lead Integration
-  leadId            String?
-  
-  status            QuotationStatus @default(DRAFT)
-  subtotal          Decimal
-  cgst              Decimal
-  sgst              Decimal
-  totalAmount       Decimal
-  discount          Decimal @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  leadId String?
+
+  status      QuotationStatus @default(DRAFT)
+  subtotal    Decimal
+  cgst        Decimal
+  sgst        Decimal
+  totalAmount Decimal
+  discount    Decimal         @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   // Audit trail
-  createdById       String?
-  createdBy         User?    @relation("QuotationCreatedBy", fields: [createdById], references: [id])
-  updatedById       String?
-  updatedBy         User?    @relation("QuotationUpdatedBy", fields: [updatedById], references: [id])
+  createdById String?
+  createdBy   User?   @relation("QuotationCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("QuotationUpdatedBy", fields: [updatedById], references: [id])
 
-  items             QuotationItem[]
+  items QuotationItem[]
 
   @@index([serviceCenterId])
   @@index([customerApprovalStatus])
@@ -666,7 +697,6 @@ model Quotation {
   @@index([createdById])
   @@index([updatedById])
 }
-
 
 enum QuotationStatus {
   DRAFT
@@ -695,32 +725,32 @@ model QuotationItem {
 
 // Invoice
 model Invoice {
-  id               String   @id @default(uuid())
-  invoiceNumber    String   @unique
-  serviceCenterId  String
-  serviceCenter    ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  customerId       String
-  customer         Customer @relation(fields: [customerId], references: [id])
-  vehicleId        String
-  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id])
-  jobCardId        String?
-  jobCard          JobCard? @relation(fields: [jobCardId], references: [id])
-  status           InvoiceStatus @default(UNPAID)
-  subtotal         Decimal
-  cgst             Decimal
-  sgst             Decimal
-  grandTotal       Decimal
-  placeOfSupply    String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique
+  serviceCenterId String
+  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  customerId      String
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  vehicleId       String
+  vehicle         Vehicle       @relation(fields: [vehicleId], references: [id])
+  jobCardId       String?
+  jobCard         JobCard?      @relation(fields: [jobCardId], references: [id])
+  status          InvoiceStatus @default(UNPAID)
+  subtotal        Decimal
+  cgst            Decimal
+  sgst            Decimal
+  grandTotal      Decimal
+  placeOfSupply   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   // Audit trail
-  createdById      String?
-  createdBy        User?    @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
-  updatedById      String?
-  updatedBy        User?    @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id])
+  createdById String?
+  createdBy   User?   @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id])
 
-  items            InvoiceItem[]
+  items InvoiceItem[]
 
   @@index([serviceCenterId])
   @@index([jobCardId])
@@ -735,9 +765,9 @@ enum InvoiceStatus {
 }
 
 model InvoiceItem {
-  id         String   @id @default(uuid())
+  id         String  @id @default(uuid())
   invoiceId  String
-  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+  invoice    Invoice @relation(fields: [invoiceId], references: [id])
   name       String
   hsnSacCode String?
   unitPrice  Decimal
@@ -749,38 +779,38 @@ model InvoiceItem {
 
 // Files
 model File {
-  id                String      @id @default(uuid())
-  url               String      // Cloudinary secure URL
-  publicId          String      @unique // Cloudinary public ID (for deletion)
-  filename          String
-  format            String      // jpg, png, pdf, mp4, etc.
-  bytes             Int         // File size in bytes
-  width             Int?        // Image width (if image)
-  height            Int?        // Image height (if image)
-  duration          Int?        // Video duration in seconds (if video)
-  category          String      // customer_id_proof, vehicle_rc, warranty_video, etc.
-  
+  id       String  @id @default(uuid())
+  url      String // Cloudinary secure URL
+  publicId String? @unique // Cloudinary public ID (Now Optional)
+  filename String
+  format   String // jpg, png, pdf, mp4, etc.
+  bytes    Int // File size in bytes
+  width    Int? // Image width (if image)
+  height   Int? // Image height (if image)
+  duration Int? // Video duration in seconds (if video)
+  category String // customer_id_proof, vehicle_rc, warranty_video, etc.
+
   // Generic relation fields (for flexibility)
   relatedEntityId   String
-  relatedEntityType String      // appointment, job_card, vehicle, customer
-  
+  relatedEntityType String // appointment, job_card, vehicle, customer
+
   // Specific foreign key relations (optional, based on relatedEntityType)
-  appointmentId     String?
-  appointment       Appointment? @relation("AppointmentFiles", fields: [appointmentId], references: [id], onDelete: Cascade)
-  
-  jobCardId         String?
-  jobCard           JobCard?    @relation("JobCardFiles", fields: [jobCardId], references: [id], onDelete: Cascade)
-  
-  vehicleId         String?
-  vehicle           Vehicle?    @relation("VehicleFiles", fields: [vehicleId], references: [id], onDelete: Cascade)
-  
-  customerId        String?
-  customer          Customer?   @relation("CustomerFiles", fields: [customerId], references: [id], onDelete: Cascade)
-  
-  uploadedBy        String?     // User ID
-  metadata          Json?       // Additional Cloudinary metadata
-  createdAt         DateTime    @default(now())
-  
+  appointmentId String?
+  appointment   Appointment? @relation("AppointmentFiles", fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  jobCardId String?
+  jobCard   JobCard? @relation("JobCardFiles", fields: [jobCardId], references: [id], onDelete: Cascade)
+
+  vehicleId String?
+  vehicle   Vehicle? @relation("VehicleFiles", fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation("CustomerFiles", fields: [customerId], references: [id], onDelete: Cascade)
+
+  uploadedBy String? // User ID
+  metadata   Json? // Additional Cloudinary metadata
+  createdAt  DateTime @default(now())
+
   @@index([relatedEntityId, relatedEntityType])
   @@index([category])
   @@index([publicId])
@@ -792,37 +822,37 @@ model File {
 
 // ✅ NEW: Lead Model
 model Lead {
-  id              String     @id @default(uuid())
-  leadNumber      String     @unique
-  customerId      String?
-  customerName    String
-  phone           String
-  email           String?
-  vehicleMake     String?
-  vehicleModel    String?
-  
+  id           String  @id @default(uuid())
+  leadNumber   String  @unique
+  customerId   String?
+  customerName String
+  phone        String
+  email        String?
+  vehicleMake  String?
+  vehicleModel String?
+
   // Lead Details
-  inquiryType     String     // Service, Sales, Parts
-  serviceType     String?
-  source          String     // walk_in, phone, referral, online, other
-  status          LeadStatus @default(NEW)
-  
+  inquiryType String // Service, Sales, Parts
+  serviceType String?
+  source      String // walk_in, phone, referral, online, other
+  status      LeadStatus @default(NEW)
+
   // Conversion Tracking
-  convertedTo     String?    // appointment, quotation, job_card
-  convertedId     String?
-  quotationId     String?
-  jobCardId       String?
-  appointmentId   String?
-  
+  convertedTo   String? // appointment, quotation, job_card
+  convertedId   String?
+  quotationId   String?
+  jobCardId     String?
+  appointmentId String?
+
   // Follow-up
   notes           String?
   followUpDate    DateTime?
   assignedTo      String?
   serviceCenterId String?
-  
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
   @@index([phone])
   @@index([serviceCenterId])
@@ -839,32 +869,31 @@ enum LeadStatus {
 
 // ✅ NEW: CheckInSlip Model
 model CheckInSlip {
-  id                  String    @id @default(uuid())
-  slipNumber          String    @unique
-  jobCardId          String
-  jobCard             JobCard   @relation(fields: [jobCardId], references: [id])
-  serviceCenterId     String
-  
+  id              String  @id @default(uuid())
+  slipNumber      String  @unique
+  jobCardId       String
+  jobCard         JobCard @relation(fields: [jobCardId], references: [id])
+  serviceCenterId String
+
   // Check-in Details
   checkInDate         DateTime
   checkInTime         String
   expectedServiceDate DateTime?
-  
+
   // Customer & Vehicle (denormalized for slip printing)
-  customerName        String
-  customerPhone       String
-  vehicleMake         String
-  vehicleModel        String
-  registrationNumber  String
-  
+  customerName       String
+  customerPhone      String
+  vehicleMake        String
+  vehicleModel       String
+  registrationNumber String
+
   // Additional Information
-  notes               String?
-  odometerReading     String?
-  fuelLevel           String?
-  
-  createdAt           DateTime  @default(now())
-  
+  notes           String?
+  odometerReading String?
+  fuelLevel       String?
+
+  createdAt DateTime @default(now())
+
   @@index([jobCardId])
   @@index([serviceCenterId])
 }
-
