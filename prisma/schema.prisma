@@ -666,22 +666,39 @@ model Quotation {
   passedToManager   Boolean   @default(false)
   passedToManagerAt DateTime?
   managerId         String?
+  sentToManager     Boolean   @default(false)
+  sentToManagerAt   DateTime?
+  managerApproved   Boolean   @default(false)
+  managerApprovedAt DateTime?
+  managerRejected   Boolean   @default(false)
+  managerRejectedAt DateTime?
 
   // ✅ NEW: Customer Approval Tracking
   customerApprovalStatus  String?   @default("PENDING") // PENDING, APPROVED, REJECTED
+  customerApproved        Boolean   @default(false)
   customerApprovedAt      DateTime?
+  customerRejected        Boolean   @default(false)
+  customerRejectedAt      DateTime?
   customerRejectionReason String?
   approvalHistory         Json?
+
+  sentToCustomer   Boolean   @default(false)
+  sentToCustomerAt DateTime?
+  whatsappSent     Boolean   @default(false)
+  whatsappSentAt   DateTime?
 
   // ✅ NEW: Lead Integration
   leadId String?
 
   status      QuotationStatus @default(DRAFT)
   subtotal    Decimal
+  preGstAmount Decimal?       @default(0)
   cgst        Decimal
   sgst        Decimal
+  igst        Decimal?        @default(0)
   totalAmount Decimal
   discount    Decimal         @default(0)
+  discountPercent Decimal?    @default(0)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -714,14 +731,17 @@ enum QuotationStatus {
 }
 
 model QuotationItem {
-  id          String    @id @default(uuid())
-  quotationId String
-  quotation   Quotation @relation(fields: [quotationId], references: [id])
-  partName    String
-  partNumber  String?
-  quantity    Int
-  rate        Decimal
-  gstPercent  Int
+  id           String    @id @default(uuid())
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id])
+  serialNumber Int?
+  partName     String
+  partNumber   String?
+  hsnSacCode   String?
+  quantity     Int
+  rate         Decimal
+  gstPercent   Int
+  amount       Decimal?
 
   @@index([quotationId])
 }
