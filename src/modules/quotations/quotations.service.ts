@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
@@ -9,6 +9,22 @@ export class QuotationsService {
 
     async create(createQuotationDto: CreateQuotationDto) {
         const { serviceCenterId, items, discount = 0, ...rest } = createQuotationDto;
+
+        // Check if quotation already exists for this appointment or job card
+        if (rest.appointmentId || rest.jobCardId) {
+            const existingQuotation = await this.prisma.quotation.findFirst({
+                where: {
+                    OR: [
+                        { appointmentId: rest.appointmentId || undefined },
+                        { jobCardId: rest.jobCardId || undefined },
+                    ].filter(cond => cond[Object.keys(cond)[0]] !== undefined)
+                }
+            });
+
+            if (existingQuotation) {
+                throw new BadRequestException('A quotation already exists for this appointment or job card');
+            }
+        }
 
         // Generate Quotation Number: QTN-{YYYY}-{SEQ}
         const year = new Date().getFullYear();
@@ -108,7 +124,7 @@ export class QuotationsService {
                 take: parseInt(limit),
                 include: {
                     customer: { select: { name: true, phone: true } },
-                    vehicle: { select: { registration: true, vehicleModel: true } },
+                    vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
                     items: true,
                 },
                 orderBy: buildOrderBy(sortBy, sortOrder),

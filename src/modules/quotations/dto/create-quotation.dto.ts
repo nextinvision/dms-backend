@@ -40,6 +40,10 @@ export class CreateQuotationDto {
     @IsOptional()
     appointmentId?: string;
 
+    @IsUUID()
+    @IsOptional()
+    jobCardId?: string;
+
     @IsString()
     @IsOptional()
     quotationDate?: string;
