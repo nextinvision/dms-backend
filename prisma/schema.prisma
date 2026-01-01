@@ -735,6 +735,7 @@ model Invoice {
   vehicle         Vehicle       @relation(fields: [vehicleId], references: [id])
   jobCardId       String?
   jobCard         JobCard?      @relation(fields: [jobCardId], references: [id])
+  invoiceType     InvoiceType    @default(JOB_CARD)
   status          InvoiceStatus @default(UNPAID)
   subtotal        Decimal
   cgst            Decimal
@@ -754,6 +755,7 @@ model Invoice {
 
   @@index([serviceCenterId])
   @@index([jobCardId])
+  @@index([invoiceType])
   @@index([createdById])
   @@index([updatedById])
 }
@@ -762,6 +764,11 @@ enum InvoiceStatus {
   UNPAID
   PAID
   CANCELLED
+}
+
+enum InvoiceType {
+  OTC_ORDER
+  JOB_CARD
 }
 
 model InvoiceItem {

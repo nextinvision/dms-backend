@@ -22,7 +22,7 @@ export class CustomersController {
     constructor(private readonly customersService: CustomersService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center', 'inventory_manager')
     create(@Body() createCustomerDto: CreateCustomerDto) {
         return this.customersService.create(createCustomerDto);
     }
@@ -34,19 +34,19 @@ export class CustomersController {
     }
 
     @Get()
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center', 'inventory_manager')
     findAll(@Query() query: any) {
         return this.customersService.findAll(query);
     }
 
     @Get('search')
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center', 'inventory_manager')
     search(@Query('query') query: string, @Query('type') type: string) {
         return this.customersService.search(query, type);
     }
 
     @Get(':id')
-    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer', 'call_center', 'inventory_manager')
     findOne(@Param('id') id: string) {
         return this.customersService.findOne(id);
     }

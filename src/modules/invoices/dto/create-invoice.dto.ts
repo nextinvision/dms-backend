@@ -40,6 +40,10 @@ export class CreateInvoiceDto {
     @IsOptional()
     jobCardId?: string;
 
+    @IsString()
+    @IsOptional()
+    invoiceType?: 'OTC_ORDER' | 'JOB_CARD';
+
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => InvoiceItemDto)
