@@ -2,10 +2,17 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { PdfGeneratorService } from '../pdf-generator/pdf-generator.service';
+import { FilesService } from '../files/files.service';
+import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
 
 @Injectable()
 export class QuotationsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private pdfGenerator: PdfGeneratorService,
+        private filesService: FilesService,
+    ) { }
 
     async create(createQuotationDto: CreateQuotationDto) {
         const { serviceCenterId, items, discount = 0, ...rest } = createQuotationDto;
@@ -118,18 +125,6 @@ export class QuotationsService {
                 passedToManager: true,
                 passedToManagerAt: new Date(),
                 managerId,
-            },
-        });
-    }
-
-    async updateCustomerApproval(id: string, data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
-        await this.findOne(id);
-        return this.prisma.quotation.update({
-            where: { id },
-            data: {
-                customerApprovalStatus: data.status,
-                customerRejectionReason: data.reason,
-                customerApprovedAt: new Date(),
             },
         });
     }
@@ -287,5 +282,140 @@ export class QuotationsService {
                 where: { id },
             });
         });
+    }
+
+    async updateCustomerApproval(id: string, data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
+        await this.findOne(id);
+        const status = data.status === 'APPROVED' ? 'CUSTOMER_APPROVED' : 'CUSTOMER_REJECTED';
+
+        const updateData: any = {
+            status,
+            customerApprovalStatus: data.status,
+            customerApproved: data.status === 'APPROVED',
+            customerApprovedAt: data.status === 'APPROVED' ? new Date() : null,
+            customerRejected: data.status === 'REJECTED',
+            customerRejectedAt: data.status === 'REJECTED' ? new Date() : null,
+            customerRejectionReason: data.reason || null,
+        };
+
+        // If approved, delete the quotation PDF
+        if (data.status === 'APPROVED') {
+            try {
+                await this.filesService.deleteFilesByCategory(
+                    'quotation',
+                    id,
+                    'quotation_pdf' as FileCategory,
+                );
+            } catch (error) {
+                console.error('Failed to delete quotation PDF:', error);
+            }
+        }
+
+        return this.prisma.quotation.update({
+            where: { id },
+            data: updateData,
+        });
+    }
+
+    async generateAndSendPdf(id: string) {
+        // Import the HTML template helper
+        const { generateQuotationHtmlTemplate } = await import('./templates/quotation-html.template');
+
+        // Fetch complete quotation data with all relations
+        const quotation = await this.prisma.quotation.findUnique({
+            where: { id },
+            include: {
+                customer: true,
+                vehicle: true,
+                items: {
+                    orderBy: { serialNumber: 'asc' },
+                },
+                serviceCenter: true,
+            },
+        });
+
+        if (!quotation) {
+            throw new NotFoundException('Quotation not found');
+        }
+
+        // Get WhatsApp number and validate
+        const rawWhatsapp = (quotation.customer as any)?.whatsappNumber || quotation.customer?.phone;
+        if (!rawWhatsapp) {
+            throw new BadRequestException('Customer WhatsApp number is missing');
+        }
+
+        let customerWhatsapp = rawWhatsapp.replace(/\D/g, '');
+
+        // Handle leading '0'
+        if (customerWhatsapp.length === 11 && customerWhatsapp.startsWith('0')) {
+            customerWhatsapp = customerWhatsapp.substring(1);
+        }
+
+        // Ensure 91 prefix for Indian numbers
+        if (customerWhatsapp.length === 10) {
+            customerWhatsapp = `91${customerWhatsapp}`;
+        }
+
+        // Validate WhatsApp number
+        if (customerWhatsapp.length < 10) {
+            throw new BadRequestException('Invalid WhatsApp number format');
+        }
+
+        // Prepare service center and advisor data
+        const serviceCenter = quotation.serviceCenter || {
+            name: '42 EV Tech & Services',
+            address: '123 Main Street, Industrial Area',
+            city: 'Pune',
+            state: 'Maharashtra',
+            pincode: '411001',
+            phone: '+91-20-12345678',
+        };
+
+        const serviceAdvisor = {
+            name: 'Service Advisor',
+            phone: '+91-9876543210',
+        };
+
+        // Generate HTML
+        const html = generateQuotationHtmlTemplate({
+            quotation,
+            serviceCenter,
+            serviceAdvisor,
+        });
+
+        // Generate PDF
+        const pdfBuffer = await this.pdfGenerator.generatePdfFromHtml(html, {
+            filename: `quotation-${quotation.quotationNumber}.pdf`,
+        });
+
+        // Upload PDF to file system
+        const { url: pdfUrl, file } = await this.filesService.uploadBuffer(
+            pdfBuffer,
+            `quotation-${quotation.quotationNumber}.pdf`,
+            {
+                category: 'quotation_pdf' as FileCategory,
+                relatedEntityType: 'quotation' as RelatedEntityType,
+                relatedEntityId: quotation.id,
+            }
+        );
+
+        // Update quotation status
+        await this.prisma.quotation.update({
+            where: { id },
+            data: {
+                status: 'SENT_TO_CUSTOMER',
+                sentToCustomer: true,
+                sentToCustomerAt: new Date(),
+                whatsappSent: true,
+                whatsappSentAt: new Date(),
+            },
+        });
+
+        return {
+            success: true,
+            pdfUrl,
+            whatsappNumber: customerWhatsapp,
+            fileId: file.id,
+        };
     }
 }
