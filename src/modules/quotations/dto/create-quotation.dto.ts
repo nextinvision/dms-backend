@@ -21,6 +21,14 @@ class QuotationItemDto {
     @IsNumber()
     @IsNotEmpty()
     gstPercent: number;
+
+    @IsNumber()
+    @IsOptional()
+    amount?: number;
+
+    @IsNumber()
+    @IsOptional()
+    serialNumber?: number;
 }
 
 export class CreateQuotationDto {
@@ -47,6 +55,10 @@ export class CreateQuotationDto {
     @IsString()
     @IsOptional()
     quotationDate?: string;
+
+    @IsString()
+    @IsOptional()
+    validUntil?: string;
 
     @IsString()
     @IsOptional()
@@ -79,15 +91,82 @@ export class CreateQuotationDto {
 
     @IsString()
     @IsOptional()
+    notes?: string;
+
+    @IsString()
+    @IsOptional()
     noteTemplateId?: string;
 
+    @IsString()
+    @IsOptional()
+    status?: string;
+
+    @IsBoolean()
+    @IsOptional()
+    passedToManager?: boolean;
+
+    @IsString()
+    @IsOptional()
+    passedToManagerAt?: string;
+
+    @IsString()
+    @IsOptional()
+    managerId?: string;
+
+    @IsString()
+    @IsOptional()
+    customerApprovalStatus?: string;
+
+    @IsString()
+    @IsOptional()
+    customerApprovedAt?: string;
+
+    @IsString()
+    @IsOptional()
+    customerRejectionReason?: string;
+
+    @IsString()
+    @IsOptional()
+    leadId?: string;
+
+    @IsString()
+    @IsOptional()
+    quotationNumber?: string;
+
+    @IsNumber()
+    @IsOptional()
+    subtotal?: number;
+
+    @IsNumber()
+    @IsOptional()
+    discount?: number = 0;
+
+    @IsNumber()
+    @IsOptional()
+    discountPercent?: number;
+
+    @IsNumber()
+    @IsOptional()
+    preGstAmount?: number;
+
+    @IsNumber()
+    @IsOptional()
+    cgst?: number;
+
+    @IsNumber()
+    @IsOptional()
+    sgst?: number;
+
+    @IsNumber()
+    @IsOptional()
+    igst?: number;
+
+    @IsNumber()
+    @IsOptional()
+    totalAmount?: number;
 
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => QuotationItemDto)
     items: QuotationItemDto[];
-
-    @IsNumber()
-    @IsOptional()
-    discount?: number = 0;
 }

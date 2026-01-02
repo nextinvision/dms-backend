@@ -10,10 +10,21 @@ export class QuotationsService {
     async create(createQuotationDto: CreateQuotationDto) {
         const { serviceCenterId, items, discount = 0, ...rest } = createQuotationDto;
 
-        // Check if quotation already exists for this appointment or job card
+        // Check if vehicle has an active job card and enforce linkage
+        const vehicle = await this.prisma.vehicle.findUnique({
+            where: { id: rest.vehicleId },
+            select: { currentStatus: true, activeJobCardId: true }
+        });
+
+        if (vehicle?.currentStatus === 'ACTIVE_JOB_CARD' && !rest.jobCardId) {
+            throw new BadRequestException(`Vehicle has an active Job Card (${vehicle.activeJobCardId}). Quotation must be linked to it.`);
+        }
+
+        // Check if quotation already exists for this appointment or job card with the same documentType
         if (rest.appointmentId || rest.jobCardId) {
             const existingQuotation = await this.prisma.quotation.findFirst({
                 where: {
+                    documentType: rest.documentType || 'Quotation',
                     OR: [
                         { appointmentId: rest.appointmentId || undefined },
                         { jobCardId: rest.jobCardId || undefined },
@@ -22,7 +33,7 @@ export class QuotationsService {
             });
 
             if (existingQuotation) {
-                throw new BadRequestException('A quotation already exists for this appointment or job card');
+                throw new BadRequestException(`A ${rest.documentType || 'Quotation'} already exists for this appointment or job card`);
             }
         }
 
@@ -52,9 +63,14 @@ export class QuotationsService {
             return acc + (itemSubtotal * item.gstPercent) / 100;
         }, 0);
 
+        const discountAmount = discount || 0;
+        const discountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+        const preGstAmount = subtotal - discountAmount;
+
         const cgst = gstTotal / 2;
         const sgst = gstTotal / 2;
-        const totalAmount = subtotal + gstTotal - discount;
+        const igst = 0; // In production, calculate based on customer state
+        const totalAmount = preGstAmount + gstTotal;
 
         return this.prisma.quotation.create({
             data: {
@@ -62,13 +78,24 @@ export class QuotationsService {
                 serviceCenterId,
                 quotationNumber,
                 subtotal,
+                preGstAmount,
                 cgst,
                 sgst,
+                igst,
                 totalAmount,
-                discount,
+                discount: discountAmount,
+                discountPercent,
                 status: 'DRAFT',
                 items: {
-                    create: items,
+                    create: items.map((item: any, index: number) => ({
+                        serialNumber: item.serialNumber || index + 1,
+                        partName: item.partName,
+                        partNumber: item.partNumber,
+                        quantity: item.quantity,
+                        rate: item.rate,
+                        gstPercent: item.gstPercent,
+                        amount: item.amount || (item.rate * item.quantity * (1 + (item.gstPercent || 18) / 100)),
+                    })),
                 },
                 // Handle optional dates
                 quotationDate: rest.quotationDate ? new Date(rest.quotationDate) : new Date(),
@@ -152,6 +179,82 @@ export class QuotationsService {
         return quotation;
     }
 
+    async update(id: string, updateDto: any) {
+        const { items, ...rest } = updateDto;
+
+        await this.findOne(id);
+
+        // Recalculate totals if items are provided
+        let totals: any = {};
+        if (items) {
+            const subtotal = items.reduce((acc, item) => acc + item.rate * item.quantity, 0);
+            const gstTotal = items.reduce((acc, item) => {
+                const itemSubtotal = item.rate * item.quantity;
+                return acc + (itemSubtotal * item.gstPercent) / 100;
+            }, 0);
+
+            const discountAmount = rest.discount ?? 0;
+            const discountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+            const preGstAmount = subtotal - discountAmount;
+
+            const cgst = gstTotal / 2;
+            const sgst = gstTotal / 2;
+            const igst = 0;
+            const totalAmount = preGstAmount + gstTotal;
+
+            totals = { subtotal, preGstAmount, cgst, sgst, igst, totalAmount, discountPercent };
+        }
+
+        return this.prisma.$transaction(async (tx) => {
+            if (items) {
+                // Remove old items
+                await tx.quotationItem.deleteMany({
+                    where: { quotationId: id },
+                });
+
+                // Create new items
+                await tx.quotationItem.createMany({
+                    data: items.map((item: any, index: number) => ({
+                        serialNumber: item.serialNumber || index + 1,
+                        partName: item.partName,
+                        partNumber: item.partNumber,
+                        quantity: item.quantity,
+                        rate: item.rate,
+                        gstPercent: item.gstPercent,
+                        amount: item.amount || (item.rate * item.quantity * (1 + (item.gstPercent || 18) / 100)),
+                        quotationId: id,
+                    })),
+                });
+            }
+
+            // Update quotation
+            return tx.quotation.update({
+                where: { id },
+                data: {
+                    ...rest,
+                    ...totals,
+                    // Handle dates if present
+                    quotationDate: rest.quotationDate ? new Date(rest.quotationDate) : undefined,
+                    insuranceStartDate: rest.insuranceStartDate ? new Date(rest.insuranceStartDate) : undefined,
+                    insuranceEndDate: rest.insuranceEndDate ? new Date(rest.insuranceEndDate) : undefined,
+                    sentToCustomerAt: rest.sentToCustomerAt ? new Date(rest.sentToCustomerAt) : undefined,
+                    customerApprovedAt: rest.customerApprovedAt ? new Date(rest.customerApprovedAt) : undefined,
+                    customerRejectedAt: rest.customerRejectedAt ? new Date(rest.customerRejectedAt) : undefined,
+                    sentToManagerAt: rest.sentToManagerAt ? new Date(rest.sentToManagerAt) : undefined,
+                    managerApprovedAt: rest.managerApprovedAt ? new Date(rest.managerApprovedAt) : undefined,
+                    managerRejectedAt: rest.managerRejectedAt ? new Date(rest.managerRejectedAt) : undefined,
+                    whatsappSentAt: rest.whatsappSentAt ? new Date(rest.whatsappSentAt) : undefined,
+                    passedToManagerAt: rest.passedToManagerAt ? new Date(rest.passedToManagerAt) : undefined,
+                },
+                include: {
+                    items: true,
+                    customer: true,
+                    vehicle: true,
+                },
+            });
+        });
+    }
+
     async approve(id: string) {
         await this.findOne(id);
         return this.prisma.quotation.update({
@@ -163,14 +266,26 @@ export class QuotationsService {
     async managerReview(id: string, data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
         await this.findOne(id);
         const status = data.status === 'APPROVED' ? 'MANAGER_APPROVED' : 'MANAGER_REJECTED';
-        // Ensure we save the notes if there's a field for it, otherwise just status
-        // Assuming 'notes' field might not exist on Quotation model yet, so we just update status for now.
-        // If Model doesn't support notes, we lose them. Let's check schema.prisma later if needed.
         return this.prisma.quotation.update({
             where: { id },
             data: {
                 status
             },
+        });
+    }
+
+    async remove(id: string) {
+        await this.findOne(id);
+        return this.prisma.$transaction(async (tx) => {
+            // Delete associated items first
+            await tx.quotationItem.deleteMany({
+                where: { quotationId: id },
+            });
+
+            // Then delete the quotation
+            return tx.quotation.delete({
+                where: { id },
+            });
         });
     }
 }

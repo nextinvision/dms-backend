@@ -4,9 +4,11 @@ import {
     Post,
     Body,
     Patch,
+    Put,
     Param,
     Query,
     UseGuards,
+    Delete,
 } from '@nestjs/common';
 import { QuotationsService } from './quotations.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
@@ -23,6 +25,12 @@ export class QuotationsController {
     @Roles('admin', 'sc_manager', 'service_advisor')
     create(@Body() createQuotationDto: CreateQuotationDto) {
         return this.quotationsService.create(createQuotationDto);
+    }
+
+    @Put(':id')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    update(@Param('id') id: string, @Body() updateDto: any) {
+        return this.quotationsService.update(id, updateDto);
     }
 
     @Get()
@@ -59,6 +67,12 @@ export class QuotationsController {
     @Roles('admin', 'sc_manager', 'service_advisor')
     updateCustomerApproval(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
         return this.quotationsService.updateCustomerApproval(id, data);
+    }
+
+    @Delete(':id')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    remove(@Param('id') id: string) {
+        return this.quotationsService.remove(id);
     }
 }
 
