@@ -5,6 +5,7 @@ export enum RelatedEntityType {
   JOB_CARD = 'job_card',
   VEHICLE = 'vehicle',
   CUSTOMER = 'customer',
+  QUOTATION = 'quotation',
 }
 
 export enum FileCategory {
@@ -21,6 +22,7 @@ export enum FileCategory {
   VEHICLE_VIN_IMAGE = 'vehicle_vin_image',
   VEHICLE_ODO_IMAGE = 'vehicle_odo_image',
   VEHICLE_DAMAGE_IMAGE = 'vehicle_damage_image',
+  QUOTATION_PDF = 'quotation_pdf',
 }
 
 export class CreateFileDto {

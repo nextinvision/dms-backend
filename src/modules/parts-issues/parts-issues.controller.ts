@@ -45,9 +45,15 @@ export class PartsIssuesController {
     }
 
     @Patch(':id/approve')
-    @Roles('admin')
+    @Roles('admin', 'central_inventory_manager')
     approve(@Param('id') id: string, @Body('approvedItems') approvedItems: any[]) {
-        return this.partsIssuesService.approve(id, approvedItems);
+        return this.partsIssuesService.approveByCIM(id, approvedItems);
+    }
+
+    @Patch(':id/admin-approve')
+    @Roles('admin')
+    adminApprove(@Param('id') id: string) {
+        return this.partsIssuesService.approveByAdmin(id);
     }
 
     @Patch(':id/dispatch')

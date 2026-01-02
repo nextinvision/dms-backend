@@ -9,6 +9,42 @@ export class PurchaseOrdersService {
     async create(createDto: CreatePurchaseOrderDto) {
         const { items } = createDto;
 
+        // Validate items - must have either centralInventoryPartId or inventoryPartId
+        for (const item of items) {
+            if (!item.centralInventoryPartId && !item.inventoryPartId) {
+                throw new BadRequestException('Each item must have either centralInventoryPartId or inventoryPartId');
+            }
+            
+            // If inventoryPartId is provided, fetch the part to get all details if not provided
+            if (item.inventoryPartId) {
+                const inventoryPart = await this.prisma.inventory.findUnique({
+                    where: { id: item.inventoryPartId },
+                });
+                if (!inventoryPart) {
+                    throw new NotFoundException(`Inventory part ${item.inventoryPartId} not found`);
+                }
+                // Populate all part fields from inventory if not provided
+                if (!item.partName) item.partName = inventoryPart.partName;
+                if (!item.partNumber) item.partNumber = inventoryPart.partNumber;
+                if (!item.oemPartNumber) item.oemPartNumber = inventoryPart.oemPartNumber || null;
+                if (!item.category) item.category = inventoryPart.category;
+                if (!item.originType) item.originType = inventoryPart.originType || null;
+                if (!item.description) item.description = inventoryPart.description || null;
+                if (!item.brandName) item.brandName = inventoryPart.brandName || null;
+                if (!item.variant) item.variant = inventoryPart.variant || null;
+                if (!item.partType) item.partType = inventoryPart.partType || null;
+                if (!item.color) item.color = inventoryPart.color || null;
+                if (!item.unit) item.unit = inventoryPart.unit || null;
+                // Use inventory part pricing if not provided
+                if (!item.unitPrice) {
+                    item.unitPrice = Number(inventoryPart.costPrice); // Use costPrice for purchase orders
+                }
+                if (!item.gstRate) {
+                    item.gstRate = inventoryPart.gstRate;
+                }
+            }
+        }
+
         // Generate PO Number: PO-{YYYY}-{SEQ}
         const year = new Date().getFullYear();
         const prefix = `PO-${year}-`;
@@ -41,8 +77,10 @@ export class PurchaseOrdersService {
 
         return this.prisma.purchaseOrder.create({
             data: {
-                ...createDto,
                 poNumber,
+                supplierId: createDto.supplierId,
+                fromServiceCenterId: createDto.fromServiceCenterId,
+                requestedById: createDto.requestedById,
                 subtotal,
                 cgst,
                 sgst,
@@ -50,31 +88,79 @@ export class PurchaseOrdersService {
                 status: 'DRAFT',
                 orderDate: new Date(createDto.orderDate),
                 expectedDeliveryDate: createDto.expectedDeliveryDate ? new Date(createDto.expectedDeliveryDate) : null,
+                paymentTerms: createDto.paymentTerms,
+                orderNotes: createDto.orderNotes,
                 items: {
-                    create: items,
+                    create: items.map(item => ({
+                        centralInventoryPartId: item.centralInventoryPartId,
+                        inventoryPartId: item.inventoryPartId,
+                        // Part Information
+                        partName: item.partName,
+                        partNumber: item.partNumber,
+                        oemPartNumber: item.oemPartNumber,
+                        category: item.category,
+                        originType: item.originType,
+                        description: item.description,
+                        brandName: item.brandName,
+                        variant: item.variant,
+                        partType: item.partType,
+                        color: item.color,
+                        unit: item.unit,
+                        // Quantity and Pricing
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        gstRate: item.gstRate,
+                        // Additional Information
+                        urgency: item.urgency,
+                        notes: item.notes,
+                    })),
                 },
             },
             include: {
-                items: true,
+                items: {
+                    include: {
+                        inventoryPart: true,
+                    },
+                },
                 supplier: true,
+                fromServiceCenter: true,
+                requestedBy: true,
             },
         });
     }
 
     async findAll(query: any) {
-        const { page = 1, limit = 20, status, supplierId } = query;
+        const { page = 1, limit = 20, status, supplierId, fromServiceCenterId, onlyServiceCenterOrders } = query;
         const skip = (page - 1) * limit;
 
         const where: any = {};
         if (status) where.status = status;
         if (supplierId) where.supplierId = supplierId;
+        
+        // Filter to only show purchase orders from service centers (not supplier orders)
+        // If onlyServiceCenterOrders is true or not specified, show only SC orders
+        if (onlyServiceCenterOrders !== false && !fromServiceCenterId) {
+            where.fromServiceCenterId = { not: null };
+        } else if (fromServiceCenterId) {
+            // If specific service center ID is provided, use it
+            where.fromServiceCenterId = fromServiceCenterId;
+        }
 
         const [data, total] = await Promise.all([
             this.prisma.purchaseOrder.findMany({
                 where,
                 skip: Number(skip),
                 take: Number(limit),
-                include: { supplier: true },
+                include: { 
+                    supplier: true,
+                    fromServiceCenter: true,
+                    requestedBy: true,
+                    items: {
+                        include: {
+                            inventoryPart: true,
+                        },
+                    },
+                },
                 orderBy: { createdAt: 'desc' },
             }),
             this.prisma.purchaseOrder.count({ where }),
@@ -96,7 +182,13 @@ export class PurchaseOrdersService {
             where: { id },
             include: {
                 supplier: true,
-                items: true,
+                fromServiceCenter: true,
+                requestedBy: true,
+                items: {
+                    include: {
+                        inventoryPart: true,
+                    },
+                },
             },
         });
 
@@ -110,6 +202,16 @@ export class PurchaseOrdersService {
         return this.prisma.purchaseOrder.update({
             where: { id },
             data: { status: 'PENDING_APPROVAL' },
+            include: {
+                items: {
+                    include: {
+                        inventoryPart: true,
+                    },
+                },
+                supplier: true,
+                fromServiceCenter: true,
+                requestedBy: true,
+            },
         });
     }
 
@@ -119,6 +221,16 @@ export class PurchaseOrdersService {
         return this.prisma.purchaseOrder.update({
             where: { id },
             data: { status: 'APPROVED' },
+            include: {
+                items: {
+                    include: {
+                        inventoryPart: true,
+                    },
+                },
+                supplier: true,
+                fromServiceCenter: true,
+                requestedBy: true,
+            },
         });
     }
 
@@ -134,15 +246,29 @@ export class PurchaseOrdersService {
                     data: { receivedQty: rxItem.acceptedQty },
                 });
 
-                // Update Central Inventory
-                const poItem = po.items.find(i => i.id === rxItem.itemId);
+                // Get the PO item to check which inventory to update
+                const poItem = await tx.pOItem.findUnique({
+                    where: { id: rxItem.itemId },
+                });
+
                 if (poItem) {
-                    await tx.centralInventory.update({
-                        where: { id: poItem.centralInventoryPartId },
-                        data: {
-                            stockQuantity: { increment: rxItem.acceptedQty },
-                        },
-                    });
+                    if (poItem.centralInventoryPartId) {
+                        // Update Central Inventory
+                        await tx.centralInventory.update({
+                            where: { id: poItem.centralInventoryPartId },
+                            data: {
+                                stockQuantity: { increment: rxItem.acceptedQty },
+                            },
+                        });
+                    } else if (poItem.inventoryPartId) {
+                        // Update Service Center Inventory
+                        await tx.inventory.update({
+                            where: { id: poItem.inventoryPartId },
+                            data: {
+                                stockQuantity: { increment: rxItem.acceptedQty },
+                            },
+                        });
+                    }
                 }
             }
 
