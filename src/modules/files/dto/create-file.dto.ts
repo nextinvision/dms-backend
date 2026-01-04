@@ -74,6 +74,23 @@ export class CreateFileDto {
   @IsOptional()
   uploadedBy?: string; // User ID
 
+  // Optional explicit relations for denormalization
+  @IsString()
+  @IsOptional()
+  appointmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  jobCardId?: string;
+
+  @IsString()
+  @IsOptional()
+  vehicleId?: string;
+
+  @IsString()
+  @IsOptional()
+  customerId?: string;
+
   @IsObject()
   @IsOptional()
   metadata?: Record<string, any>; // Additional Cloudinary metadata

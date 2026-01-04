@@ -63,6 +63,21 @@ export class QuotationsService {
 
         const quotationNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
+        // Auto-link to existing open lead if not provided
+        let leadId = rest.leadId;
+        if (!leadId) {
+            const existingLead = await this.prisma.lead.findFirst({
+                where: {
+                    customerId: createQuotationDto.customerId,
+                    status: { in: ['NEW', 'IN_DISCUSSION'] }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+            if (existingLead) {
+                leadId = existingLead.id;
+            }
+        }
+
         // Calculate totals
         const subtotal = items.reduce((acc, item) => acc + item.rate * item.quantity, 0);
         const gstTotal = items.reduce((acc, item) => {
@@ -79,9 +94,10 @@ export class QuotationsService {
         const igst = 0; // In production, calculate based on customer state
         const totalAmount = preGstAmount + gstTotal;
 
-        return this.prisma.quotation.create({
+        const createdQuotation = await this.prisma.quotation.create({
             data: {
                 ...rest,
+                leadId,
                 serviceCenterId,
                 quotationNumber,
                 subtotal,
@@ -115,6 +131,25 @@ export class QuotationsService {
                 vehicle: true,
             },
         });
+
+        // Link to Lead if leadId is present (Fix for relational issue)
+        if (leadId) {
+            try {
+                await this.prisma.lead.update({
+                    where: { id: leadId },
+                    data: {
+                        quotationId: createdQuotation.id,
+                        convertedTo: 'quotation',
+                        convertedId: createdQuotation.id,
+                        status: 'IN_DISCUSSION' // Update status to reflect engagement
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to link quotation to lead:', error);
+            }
+        }
+
+        return createdQuotation;
     }
 
     async passToManager(id: string, managerId: string) {
@@ -410,6 +445,44 @@ export class QuotationsService {
                 whatsappSentAt: new Date(),
             },
         });
+
+        // Update linked Lead if exists, or try to find one
+        let leadId = quotation.leadId;
+        if (!leadId && quotation.customerId) {
+            // Try to find an open lead
+            const existingLead = await this.prisma.lead.findFirst({
+                where: {
+                    customerId: quotation.customerId,
+                    status: { in: ['NEW', 'IN_DISCUSSION'] }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            if (existingLead) {
+                leadId = existingLead.id;
+                // Link quotation to this lead
+                await this.prisma.quotation.update({
+                    where: { id },
+                    data: { leadId }
+                });
+            }
+        }
+
+        if (leadId) {
+            try {
+                await this.prisma.lead.update({
+                    where: { id: leadId },
+                    data: {
+                        status: 'IN_DISCUSSION', // Ensure status reflects active discussion
+                        quotationId: quotation.id, // Ensure link is reinforced
+                        convertedTo: 'quotation',
+                        convertedId: quotation.id
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to update linked lead:', error);
+            }
+        }
 
         return {
             success: true,
