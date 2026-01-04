@@ -8,32 +8,63 @@ export class QuotationsService {
     constructor(private prisma: PrismaService) { }
 
     async create(createQuotationDto: CreateQuotationDto) {
-        const { serviceCenterId, items, discount = 0, ...rest } = createQuotationDto;
+        const { 
+            serviceCenterId, 
+            customerId, 
+            vehicleId,
+            items, 
+            discount = 0,
+            appointmentId,
+            jobCardId,
+            quotationDate,
+            validUntil,
+            documentType,
+            hasInsurance,
+            insurerId,
+            insuranceStartDate,
+            insuranceEndDate,
+            batterySerialNumber,
+            customNotes,
+            notes,
+            noteTemplateId,
+            leadId,
+            // Exclude computed fields that shouldn't be in Prisma input
+            quotationNumber: _quotationNumber,
+            subtotal: _subtotal,
+            discountPercent: _discountPercent,
+            preGstAmount: _preGstAmount,
+            cgst: _cgst,
+            sgst: _sgst,
+            igst: _igst,
+            totalAmount: _totalAmount,
+            status: _status,
+            ...rest 
+        } = createQuotationDto;
 
         // Check if vehicle has an active job card and enforce linkage
         const vehicle = await this.prisma.vehicle.findUnique({
-            where: { id: rest.vehicleId },
+            where: { id: vehicleId },
             select: { currentStatus: true, activeJobCardId: true }
         });
 
-        if (vehicle?.currentStatus === 'ACTIVE_JOB_CARD' && !rest.jobCardId) {
+        if (vehicle?.currentStatus === 'ACTIVE_JOB_CARD' && !jobCardId) {
             throw new BadRequestException(`Vehicle has an active Job Card (${vehicle.activeJobCardId}). Quotation must be linked to it.`);
         }
 
         // Check if quotation already exists for this appointment or job card with the same documentType
-        if (rest.appointmentId || rest.jobCardId) {
+        if (appointmentId || jobCardId) {
             const existingQuotation = await this.prisma.quotation.findFirst({
                 where: {
-                    documentType: rest.documentType || 'Quotation',
+                    documentType: documentType || 'Quotation',
                     OR: [
-                        { appointmentId: rest.appointmentId || undefined },
-                        { jobCardId: rest.jobCardId || undefined },
+                        { appointmentId: appointmentId || undefined },
+                        { jobCardId: jobCardId || undefined },
                     ].filter(cond => cond[Object.keys(cond)[0]] !== undefined)
                 }
             });
 
             if (existingQuotation) {
-                throw new BadRequestException(`A ${rest.documentType || 'Quotation'} already exists for this appointment or job card`);
+                throw new BadRequestException(`A ${documentType || 'Quotation'} already exists for this appointment or job card`);
             }
         }
 
@@ -74,9 +105,23 @@ export class QuotationsService {
 
         return this.prisma.quotation.create({
             data: {
-                ...rest,
                 serviceCenterId,
+                customerId,
+                vehicleId,
+                appointmentId: appointmentId || null,
+                jobCardId: jobCardId || null,
                 quotationNumber,
+                documentType: documentType || 'Quotation',
+                quotationDate: quotationDate ? new Date(quotationDate) : new Date(),
+                validUntil: validUntil ? new Date(validUntil) : null,
+                hasInsurance: hasInsurance || false,
+                insurerId: insurerId || null,
+                insuranceStartDate: insuranceStartDate ? new Date(insuranceStartDate) : null,
+                insuranceEndDate: insuranceEndDate ? new Date(insuranceEndDate) : null,
+                batterySerialNumber: batterySerialNumber || null,
+                customNotes: customNotes || notes || null,
+                noteTemplateId: noteTemplateId || null,
+                leadId: leadId || null,
                 subtotal,
                 preGstAmount,
                 cgst,
@@ -90,17 +135,14 @@ export class QuotationsService {
                     create: items.map((item: any, index: number) => ({
                         serialNumber: item.serialNumber || index + 1,
                         partName: item.partName,
-                        partNumber: item.partNumber,
+                        partNumber: item.partNumber || null,
+                        hsnSacCode: item.hsnSacCode || null,
                         quantity: item.quantity,
                         rate: item.rate,
                         gstPercent: item.gstPercent,
                         amount: item.amount || (item.rate * item.quantity * (1 + (item.gstPercent || 18) / 100)),
                     })),
                 },
-                // Handle optional dates
-                quotationDate: rest.quotationDate ? new Date(rest.quotationDate) : new Date(),
-                insuranceStartDate: rest.insuranceStartDate ? new Date(rest.insuranceStartDate) : undefined,
-                insuranceEndDate: rest.insuranceEndDate ? new Date(rest.insuranceEndDate) : undefined,
             },
             include: {
                 items: true,

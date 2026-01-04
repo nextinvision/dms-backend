@@ -9,6 +9,14 @@ class IssueItemDto {
 
     @IsNotEmpty()
     requestedQty: number;
+
+    @IsOptional()
+    @IsString()
+    partNumber?: string; // Optional: for flexible matching if ID doesn't match
+
+    @IsOptional()
+    @IsString()
+    partName?: string; // Optional: for flexible matching if ID doesn't match
 }
 
 export class CreatePartsIssueDto {
@@ -24,4 +32,8 @@ export class CreatePartsIssueDto {
     @IsEnum(JobCardPriority)
     @IsOptional()
     priority?: JobCardPriority = JobCardPriority.NORMAL;
+
+    @IsUUID()
+    @IsOptional()
+    purchaseOrderId?: string;
 }

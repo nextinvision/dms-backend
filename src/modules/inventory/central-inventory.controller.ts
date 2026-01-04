@@ -6,8 +6,10 @@ import {
     Query,
     UseGuards,
     Param,
+    Patch,
 } from '@nestjs/common';
 import { CentralInventoryService } from './central-inventory.service';
+import { UpdateCentralStockDto } from './dto/update-central-stock.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -33,5 +35,17 @@ export class CentralInventoryController {
     @Roles('admin', 'central_inventory_manager', 'inventory_manager')
     findOne(@Param('id') id: string) {
         return this.centralInventoryService.findOne(id);
+    }
+
+    @Patch(':id/stock')
+    @Roles('admin', 'central_inventory_manager')
+    updateStock(@Param('id') id: string, @Body() updateDto: UpdateCentralStockDto) {
+        return this.centralInventoryService.updateStock(id, updateDto);
+    }
+
+    @Patch(':id/stock/add')
+    @Roles('admin', 'central_inventory_manager')
+    addStock(@Param('id') id: string, @Body('quantity') quantity: number) {
+        return this.centralInventoryService.addStock(id, quantity);
     }
 }
