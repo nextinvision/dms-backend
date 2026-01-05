@@ -21,7 +21,7 @@ export class VehiclesController {
     constructor(private readonly vehiclesService: VehiclesService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'service_advisor', 'call_center')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'call_center', 'inventory_manager')
     create(@Body() createVehicleDto: CreateVehicleDto) {
         return this.vehiclesService.create(createVehicleDto);
     }

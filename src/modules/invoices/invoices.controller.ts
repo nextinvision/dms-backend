@@ -20,7 +20,7 @@ export class InvoicesController {
     constructor(private readonly invoicesService: InvoicesService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'service_advisor')
+    @Roles('admin', 'sc_manager', 'service_advisor', 'inventory_manager', 'call_center')
     create(@Body() createInvoiceDto: CreateInvoiceDto) {
         return this.invoicesService.create(createInvoiceDto);
     }

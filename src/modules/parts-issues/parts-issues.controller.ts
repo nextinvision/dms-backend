@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { PartsIssuesService } from './parts-issues.service';
 import { CreatePartsIssueDto } from './dto/create-parts-issue.dto';
+import { DispatchPartsIssueDto } from './dto/dispatch-parts-issue.dto';
+import { ApprovePartsIssueDto } from './dto/approve-parts-issue.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -21,7 +23,7 @@ export class PartsIssuesController {
     constructor(private readonly partsIssuesService: PartsIssuesService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'inventory_manager')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager')
     create(@Body() createDto: CreatePartsIssueDto, @Request() req: any) {
         return this.partsIssuesService.create(createDto, req.user.id);
     }
@@ -46,8 +48,8 @@ export class PartsIssuesController {
 
     @Patch(':id/approve')
     @Roles('admin', 'central_inventory_manager')
-    approve(@Param('id') id: string, @Body('approvedItems') approvedItems: any[]) {
-        return this.partsIssuesService.approveByCIM(id, approvedItems);
+    approve(@Param('id') id: string, @Body() approveDto: ApprovePartsIssueDto) {
+        return this.partsIssuesService.approveByCIM(id, approveDto.approvedItems);
     }
 
     @Patch(':id/admin-approve')
@@ -58,8 +60,8 @@ export class PartsIssuesController {
 
     @Patch(':id/dispatch')
     @Roles('admin', 'central_inventory_manager')
-    dispatch(@Param('id') id: string, @Body('transportDetails') transportDetails: any) {
-        return this.partsIssuesService.dispatch(id, transportDetails);
+    dispatch(@Param('id') id: string, @Body() dispatchDto: DispatchPartsIssueDto, @Request() req: any) {
+        return this.partsIssuesService.dispatch(id, dispatchDto, req.user?.id);
     }
 
     @Patch(':id/receive')

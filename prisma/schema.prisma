@@ -82,6 +82,7 @@ model User {
   quotationsUpdated   Quotation[]   @relation("QuotationUpdatedBy")
   invoicesCreated     Invoice[]     @relation("InvoiceCreatedBy")
   invoicesUpdated     Invoice[]     @relation("InvoiceUpdatedBy")
+  partsIssuesDispatched PartsIssueDispatch[] @relation("PartsIssueDispatchedBy")
 
   @@index([serviceCenterId])
 }
@@ -538,6 +539,7 @@ model PurchaseOrder {
   updatedAt            DateTime       @updatedAt
 
   items POItem[]
+  partsIssues PartsIssue[]
 
   @@index([status])
   @@index([fromServiceCenterId])
@@ -596,6 +598,8 @@ model PartsIssue {
   toServiceCenter   ServiceCenter   @relation(fields: [toServiceCenterId], references: [id])
   requestedById     String
   requestedBy       User            @relation("RequestedBy", fields: [requestedById], references: [id])
+  purchaseOrderId   String?
+  purchaseOrder     PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
   status            IssueStatus     @default(PENDING_APPROVAL)
   priority          JobCardPriority @default(NORMAL)
   dispatchedDate    DateTime?
@@ -605,9 +609,11 @@ model PartsIssue {
   updatedAt         DateTime        @updatedAt
 
   items PartsIssueItem[]
+  dispatches PartsIssueDispatch[]
 
   @@index([toServiceCenterId])
   @@index([status])
+  @@index([purchaseOrderId])
 }
 
 enum IssueStatus {
@@ -627,8 +633,32 @@ model PartsIssueItem {
   centralInventoryPartId String
   requestedQty           Int
   approvedQty            Int        @default(0)
+  issuedQty              Int        @default(0) // Total quantity issued so far
   receivedQty            Int        @default(0)
+  subPoNumber            String?     // Latest sub-PO number for this item
 
+  // Dispatch history for partial issues
+  dispatches             PartsIssueDispatch[]
+
+  @@index([issueId])
+}
+
+// Parts Issue Dispatch History (for partial issues)
+model PartsIssueDispatch {
+  id                String          @id @default(uuid())
+  issueItemId       String
+  issueItem         PartsIssueItem  @relation(fields: [issueItemId], references: [id], onDelete: Cascade)
+  issueId           String
+  issue             PartsIssue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  quantity          Int             // Quantity issued in this dispatch
+  subPoNumber       String          // Sub-PO number for this dispatch (e.g., _1_1, _1_2, _1_3C)
+  isFullyFulfilled  Boolean         @default(false) // True if this dispatch completes the request
+  dispatchedAt      DateTime        @default(now())
+  dispatchedById    String?
+  dispatchedBy      User?          @relation("PartsIssueDispatchedBy", fields: [dispatchedById], references: [id])
+  transportDetails  Json?
+
+  @@index([issueItemId])
   @@index([issueId])
 }
 
@@ -758,6 +788,7 @@ model Invoice {
   vehicle         Vehicle       @relation(fields: [vehicleId], references: [id])
   jobCardId       String?
   jobCard         JobCard?      @relation(fields: [jobCardId], references: [id])
+  invoiceType     InvoiceType    @default(JOB_CARD)
   status          InvoiceStatus @default(UNPAID)
   subtotal        Decimal
   cgst            Decimal
@@ -777,6 +808,7 @@ model Invoice {
 
   @@index([serviceCenterId])
   @@index([jobCardId])
+  @@index([invoiceType])
   @@index([createdById])
   @@index([updatedById])
 }
@@ -785,6 +817,11 @@ enum InvoiceStatus {
   UNPAID
   PAID
   CANCELLED
+}
+
+enum InvoiceType {
+  OTC_ORDER
+  JOB_CARD
 }
 
 model InvoiceItem {
