@@ -16,15 +16,23 @@ export class FilesService {
     const isTemp = createFileDto.relatedEntityId?.startsWith('TEMP_');
 
     // Prepare foreign keys for the database relations
-    let appointmentId: string | undefined = createFileDto.appointmentId;
-    let jobCardId: string | undefined = createFileDto.jobCardId;
-    let vehicleId: string | undefined = createFileDto.vehicleId;
-    let customerId: string | undefined = createFileDto.customerId;
+    // For temp entities, we DON'T set foreign keys to avoid constraint violations
+    let appointmentId: string | undefined;
+    let jobCardId: string | undefined;
+    let vehicleId: string | undefined;
+    let customerId: string | undefined;
 
     if (!isTemp && createFileDto.relatedEntityId) {
       const type = createFileDto.relatedEntityType?.toString().toLowerCase();
 
-      // Only auto-map if not already explicitly provided
+      // Only set foreign keys for non-temp entities
+      // First check if explicitly provided
+      appointmentId = createFileDto.appointmentId;
+      jobCardId = createFileDto.jobCardId;
+      vehicleId = createFileDto.vehicleId;
+      customerId = createFileDto.customerId;
+
+      // Then auto-map if not already explicitly provided
       if (type === 'appointment' && !appointmentId) appointmentId = createFileDto.relatedEntityId;
       else if (type === 'job_card' && !jobCardId) jobCardId = createFileDto.relatedEntityId;
       else if (type === 'vehicle' && !vehicleId) vehicleId = createFileDto.relatedEntityId;

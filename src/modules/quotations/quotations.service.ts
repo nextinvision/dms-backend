@@ -208,29 +208,30 @@ export class QuotationsService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId } = query;
-        const skip = calculateSkip(page, parseInt(limit));
+        const take = parseInt(limit) || 20;
+        const skip = calculateSkip(page, take);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
         if (status) where.status = status;
         if (customerId) where.customerId = customerId;
 
-        const [data, total] = await Promise.all([
-            this.prisma.quotation.findMany({
-                where,
-                skip,
-                take: parseInt(limit),
-                include: {
-                    customer: { select: { name: true, phone: true } },
-                    vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
-                    items: true,
-                },
-                orderBy: buildOrderBy(sortBy, sortOrder),
-            }),
-            this.prisma.quotation.count({ where }),
-        ]);
+        // Execute sequentially to prevent connection pool exhaustion on Supabase
+        const total = await this.prisma.quotation.count({ where });
 
-        return paginate(data, total, page, parseInt(limit));
+        const data = await this.prisma.quotation.findMany({
+            where,
+            skip,
+            take,
+            include: {
+                customer: { select: { name: true, phone: true } },
+                vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
+                items: true,
+            },
+            orderBy: buildOrderBy(sortBy, sortOrder),
+        });
+
+        return paginate(data, total, page, take);
     }
 
     async findOne(id: string) {

@@ -250,6 +250,14 @@ export class JobCardItemDto {
     @IsString()
     @IsNotEmpty()
     itemType: string; // "part" | "work_item"
+
+    @IsBoolean()
+    @IsOptional()
+    isWarranty?: boolean;
+
+    @IsString()
+    @IsOptional()
+    inventoryPartId?: string;
 }
 
 export class CreateJobCardDto {

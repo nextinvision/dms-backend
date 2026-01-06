@@ -23,19 +23,19 @@ export class PartsIssuesController {
     constructor(private readonly partsIssuesService: PartsIssuesService) { }
 
     @Post()
-    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager', 'service_engineer')
     create(@Body() createDto: CreatePartsIssueDto, @Request() req: any) {
         return this.partsIssuesService.create(createDto, req.user.id);
     }
 
     @Get()
-    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager', 'service_engineer')
     findAll(@Query() query: any) {
         return this.partsIssuesService.findAll(query);
     }
 
     @Get(':id')
-    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'central_inventory_manager', 'service_engineer')
     findOne(@Param('id') id: string) {
         return this.partsIssuesService.findOne(id);
     }

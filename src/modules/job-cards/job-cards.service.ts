@@ -49,6 +49,9 @@ export class JobCardsService {
 
         // Create Job Card in transaction
         const jobCard = await this.prisma.$transaction(async (tx) => {
+            // Check if any item is a warranty item or if part2AData has warranty info (optional check)
+            const hasWarrantyItems = items?.some(i => i.isWarranty || i.partWarrantyTag) || false;
+
             const card = await tx.jobCard.create({
                 data: {
                     serviceType: jobCardData.serviceType,
@@ -57,6 +60,10 @@ export class JobCardsService {
                     isTemporary: jobCardData.isTemporary ?? true,
                     jobCardNumber,
                     status: 'CREATED',
+                    // Auto-pass to manager if warranty items exist
+                    passedToManager: hasWarrantyItems,
+                    managerReviewStatus: hasWarrantyItems ? 'PENDING' : null,
+                    passedToManagerAt: hasWarrantyItems ? new Date() : null,
                     serviceCenter: { connect: { id: jobCardData.serviceCenterId } },
                     customer: { connect: { id: jobCardData.customerId } },
                     vehicle: { connect: { id: jobCardData.vehicleId } },
@@ -80,6 +87,8 @@ export class JobCardsService {
                             technician: item.technician,
                             labourCode: item.labourCode,
                             itemType: item.itemType,
+                            isWarranty: item.isWarranty, // Ensure isWarranty is saved to Item level
+                            inventoryPartId: item.inventoryPartId,
                         }))
                     } : undefined,
                     // Audit trail
@@ -135,6 +144,7 @@ export class JobCardsService {
     async update(id: string, updateJobCardDto: Partial<CreateJobCardDto>) {
         const existingJobCard = await this.prisma.jobCard.findUnique({
             where: { id },
+            select: { id: true, managerReviewStatus: true }
         });
 
         if (!existingJobCard) {
@@ -143,10 +153,13 @@ export class JobCardsService {
 
         const { part2AData, part1Data, uploadedBy, items, ...jobCardData } = updateJobCardDto;
 
-        // Update Job Card
-        const jobCard = await this.prisma.jobCard.update({
-            where: { id },
-            data: {
+        // Create Job Card in transaction
+        const jobCard = await this.prisma.$transaction(async (tx) => {
+            // Check if any item is a warranty item or if part2AData has warranty info (optional check)
+            const hasWarrantyItems = items?.some(i => i.isWarranty || i.partWarrantyTag) || false;
+
+            // Prepare update data
+            const updateData: any = {
                 ...(jobCardData.serviceType && { serviceType: jobCardData.serviceType }),
                 ...(jobCardData.priority && { priority: jobCardData.priority }),
                 ...(jobCardData.location && { location: jobCardData.location }),
@@ -167,7 +180,41 @@ export class JobCardsService {
                 ...(items && { part2: items as any }), // Store items as part2 JSON
                 // Update audit trail
                 ...(uploadedBy && { updatedBy: { connect: { id: uploadedBy } } }),
-            },
+            };
+
+            // Auto-pass to manager if warranty items exist
+            if (hasWarrantyItems && existingJobCard.managerReviewStatus !== 'APPROVED') {
+                updateData.passedToManager = true;
+                updateData.managerReviewStatus = 'PENDING';
+                updateData.passedToManagerAt = new Date();
+            }
+
+            // Update items if provided
+            if (items) {
+                // Delete existing items and recreate
+                await tx.jobCardItem.deleteMany({ where: { jobCardId: id } });
+
+                updateData.items = {
+                    create: items.map(item => ({
+                        srNo: item.srNo,
+                        partWarrantyTag: item.partWarrantyTag,
+                        partName: item.partName,
+                        partCode: item.partCode,
+                        qty: item.qty,
+                        amount: item.amount,
+                        technician: item.technician,
+                        labourCode: item.labourCode,
+                        itemType: item.itemType,
+                        isWarranty: item.isWarranty,
+                        inventoryPartId: item.inventoryPartId,
+                    }))
+                };
+            }
+
+            return tx.jobCard.update({
+                where: { id },
+                data: updateData,
+            });
         });
 
         // Update warranty documentation file metadata if provided
@@ -220,18 +267,29 @@ export class JobCardsService {
     }
 
     async managerReview(id: string, data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
-        const jobCard = await this.findOne(id);
+        const jobCard = await this.prisma.jobCard.findUnique({
+            where: { id },
+            include: { items: true } // Include items to create parts request
+        });
+
+        if (!jobCard) throw new NotFoundException('Job Card not found');
+
         if (!jobCard.passedToManager) {
             throw new BadRequestException('Job card has not been passed to manager for review');
         }
 
-        return this.prisma.jobCard.update({
-            where: { id },
-            data: {
-                managerReviewStatus: data.status,
-                managerReviewNotes: data.notes,
-                managerReviewedAt: new Date(),
-            },
+        // Transactions to ensure consistency
+        return this.prisma.$transaction(async (tx) => {
+            const updatedJobCard = await tx.jobCard.update({
+                where: { id },
+                data: {
+                    managerReviewStatus: data.status,
+                    managerReviewNotes: data.notes,
+                    managerReviewedAt: new Date(),
+                },
+            });
+
+            return updatedJobCard;
         });
     }
 
@@ -255,15 +313,57 @@ export class JobCardsService {
 
 
     async assignEngineer(id: string, assignEngineerDto: AssignEngineerDto) {
-        const jobCard = await this.prisma.jobCard.findUnique({ where: { id } });
+        const jobCard = await this.prisma.jobCard.findUnique({
+            where: { id },
+            include: { items: true }
+        });
         if (!jobCard) throw new NotFoundException('Job Card not found');
 
-        return this.prisma.jobCard.update({
-            where: { id },
-            data: {
-                assignedEngineerId: assignEngineerDto.engineerId,
-                status: 'ASSIGNED',
-            },
+        return this.prisma.$transaction(async (tx) => {
+            // 1. Assign the engineer
+            const updatedJobCard = await tx.jobCard.update({
+                where: { id },
+                data: {
+                    assignedEngineerId: assignEngineerDto.engineerId,
+                    status: 'ASSIGNED',
+                },
+            });
+
+            // 2. Create Parts Request for SIM (Service Inventory Manager)
+            // "when service manager assign technician the part requests mentioned in the job card will send to the SIM"
+            if (jobCard.items && jobCard.items.length > 0) {
+                const partItems = jobCard.items.filter(item => item.itemType === 'part');
+
+                if (partItems.length > 0) {
+                    // Check if a pending request already exists to avoid duplicates
+                    const existingRequest = await tx.partsRequest.findFirst({
+                        where: {
+                            jobCardId: id,
+                            status: 'PENDING'
+                        }
+                    });
+
+                    if (!existingRequest) {
+                        await tx.partsRequest.create({
+                            data: {
+                                jobCard: { connect: { id } },
+                                status: 'PENDING',
+                                items: {
+                                    create: partItems.map(item => ({
+                                        partName: item.partName,
+                                        partNumber: item.partCode,
+                                        requestedQty: item.qty,
+                                        isWarranty: item.isWarranty,
+                                        inventoryPartId: item.inventoryPartId,
+                                    }))
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
+            return updatedJobCard;
         });
     }
 
@@ -276,6 +376,57 @@ export class JobCardsService {
             data: {
                 status: updateStatusDto.status,
             },
+        });
+    }
+
+    async createPartsRequest(jobCardId: string, items: any[]) {
+        const jobCard = await this.prisma.jobCard.findUnique({ where: { id: jobCardId } });
+        if (!jobCard) throw new NotFoundException('Job Card not found');
+
+        return this.prisma.partsRequest.create({
+            data: {
+                jobCard: { connect: { id: jobCardId } },
+                items: {
+                    create: items.map(item => ({
+                        partName: item.partName || "Unknown Part",
+                        partNumber: item.partNumber || null,
+                        requestedQty: item.quantity,
+                        isWarranty: item.isWarranty || false,
+                        inventoryPartId: item.inventoryPartId || null,
+                    }))
+                }
+            },
+            include: { items: true }
+        });
+    }
+
+    async getPendingPartsRequests(serviceCenterId?: string) {
+        return this.prisma.partsRequest.findMany({
+            where: {
+                status: 'PENDING',
+                ...(serviceCenterId && {
+                    jobCard: {
+                        serviceCenterId: serviceCenterId
+                    }
+                })
+            },
+            include: {
+                jobCard: {
+                    include: {
+                        vehicle: true,
+                        customer: true
+                    }
+                },
+                items: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+    }
+
+    async updatePartsRequestStatus(id: string, status: 'APPROVED' | 'REJECTED', notes?: string) {
+        return this.prisma.partsRequest.update({
+            where: { id },
+            data: { status },
         });
     }
 
@@ -293,91 +444,96 @@ export class JobCardsService {
         if (passedToManager === 'true') where.passedToManager = true;
         if (managerReviewStatus) where.managerReviewStatus = managerReviewStatus;
 
-        const [data, total] = await Promise.all([
-            this.prisma.jobCard.findMany({
-                where,
-                skip: Number(skip),
-                take: Number(limit),
-                include: {
-                    customer: {
-                        select: {
-                            id: true,
-                            name: true,
-                            phone: true,
-                            whatsappNumber: true,
-                            alternateNumber: true,
-                            email: true,
-                            address: true,
-                            cityState: true,
-                            pincode: true,
-                            customerType: true,
-                        }
-                    },
-                    // Include full vehicle data - single source of truth
-                    vehicle: {
-                        select: {
-                            id: true,
-                            registration: true,
-                            vehicleMake: true,
-                            vehicleModel: true,
-                            vehicleYear: true,
-                            vin: true,
-                            variant: true,
-                            motorNumber: true,
-                            chargerSerialNumber: true,
-                            purchaseDate: true,
-                            warrantyStatus: true,
-                            insuranceStartDate: true,
-                            insuranceEndDate: true,
-                            insuranceCompanyName: true,
-                            vehicleColor: true,
-                        }
-                    },
-                    appointment: {
-                        select: {
-                            id: true,
-                            appointmentDate: true,
-                            appointmentTime: true,
-                            serviceType: true,
-                            customerComplaint: true,
-                            previousServiceHistory: true,
-                            estimatedServiceTime: true,
-                            estimatedCost: true,
-                            odometerReading: true,
-                            estimatedDeliveryDate: true,
-                            assignedServiceAdvisor: true,
-                            assignedTechnician: true,
-                            pickupDropRequired: true,
-                            pickupAddress: true,
-                            pickupState: true,
-                            pickupCity: true,
-                            pickupPincode: true,
-                            dropAddress: true,
-                            dropState: true,
-                            dropCity: true,
-                            dropPincode: true,
-                            preferredCommunicationMode: true,
-                            arrivalMode: true,
-                            checkInNotes: true,
-                            checkInSlipNumber: true,
-                            checkInDate: true,
-                            checkInTime: true,
-                        }
-                    },
-                    assignedEngineer: {
-                        select: {
-                            id: true,
-                            name: true,
-                        }
-                    },
-                    createdBy: { select: { id: true, name: true } },
-                    updatedBy: { select: { id: true, name: true } },
-                    quotation: true,
+        // Execute sequentially to prevent connection pool exhaustion on Supabase
+        const total = await this.prisma.jobCard.count({ where });
+
+        const data = await this.prisma.jobCard.findMany({
+
+            where,
+            skip: Number(skip),
+            take: Number(limit),
+            include: {
+                partsRequests: {
+                    include: { items: true }
                 },
-                orderBy: { createdAt: 'desc' },
-            }),
-            this.prisma.jobCard.count({ where }),
-        ]);
+                customer: {
+                    select: {
+                        id: true,
+                        name: true,
+                        phone: true,
+                        whatsappNumber: true,
+                        alternateNumber: true,
+                        email: true,
+                        address: true,
+                        cityState: true,
+                        pincode: true,
+                        customerType: true,
+                    }
+                },
+                // Include full vehicle data - single source of truth
+                vehicle: {
+                    select: {
+                        id: true,
+                        registration: true,
+                        vehicleMake: true,
+                        vehicleModel: true,
+                        vehicleYear: true,
+                        vin: true,
+                        variant: true,
+                        motorNumber: true,
+                        chargerSerialNumber: true,
+                        purchaseDate: true,
+                        warrantyStatus: true,
+                        insuranceStartDate: true,
+                        insuranceEndDate: true,
+                        insuranceCompanyName: true,
+                        vehicleColor: true,
+                    }
+                },
+                appointment: {
+                    select: {
+                        id: true,
+                        appointmentDate: true,
+                        appointmentTime: true,
+                        serviceType: true,
+                        customerComplaint: true,
+                        previousServiceHistory: true,
+                        estimatedServiceTime: true,
+                        estimatedCost: true,
+                        odometerReading: true,
+                        estimatedDeliveryDate: true,
+                        assignedServiceAdvisor: true,
+                        assignedTechnician: true,
+                        pickupDropRequired: true,
+                        pickupAddress: true,
+                        pickupState: true,
+                        pickupCity: true,
+                        pickupPincode: true,
+                        dropAddress: true,
+                        dropState: true,
+                        dropCity: true,
+                        dropPincode: true,
+                        preferredCommunicationMode: true,
+                        arrivalMode: true,
+                        checkInNotes: true,
+                        checkInSlipNumber: true,
+                        checkInDate: true,
+                        checkInTime: true,
+                    }
+                },
+                assignedEngineer: {
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                },
+                createdBy: { select: { id: true, name: true } },
+                updatedBy: { select: { id: true, name: true } },
+                quotation: true,
+            },
+            orderBy: { createdAt: 'desc' },
+
+        });
 
         return {
             data,
@@ -394,10 +550,76 @@ export class JobCardsService {
         const jobCard = await this.prisma.jobCard.findUnique({
             where: { id },
             include: {
-                customer: true,
-                vehicle: true,
-                appointment: true,
-                assignedEngineer: true,
+                customer: {
+                    select: {
+                        id: true,
+                        name: true,
+                        phone: true,
+                        whatsappNumber: true,
+                        alternateNumber: true,
+                        email: true,
+                        address: true,
+                        cityState: true,
+                        pincode: true,
+                        customerType: true,
+                    }
+                },
+                vehicle: {
+                    select: {
+                        id: true,
+                        registration: true,
+                        vehicleMake: true,
+                        vehicleModel: true,
+                        vehicleYear: true,
+                        vin: true,
+                        variant: true,
+                        motorNumber: true,
+                        chargerSerialNumber: true,
+                        purchaseDate: true,
+                        warrantyStatus: true,
+                        insuranceStartDate: true,
+                        insuranceEndDate: true,
+                        insuranceCompanyName: true,
+                        vehicleColor: true,
+                    }
+                },
+                appointment: {
+                    select: {
+                        id: true,
+                        appointmentDate: true,
+                        appointmentTime: true,
+                        serviceType: true,
+                        customerComplaint: true,
+                        previousServiceHistory: true,
+                        estimatedServiceTime: true,
+                        estimatedCost: true,
+                        odometerReading: true,
+                        estimatedDeliveryDate: true,
+                        assignedServiceAdvisor: true,
+                        assignedTechnician: true,
+                        pickupDropRequired: true,
+                        pickupAddress: true,
+                        pickupState: true,
+                        pickupCity: true,
+                        pickupPincode: true,
+                        dropAddress: true,
+                        dropState: true,
+                        dropCity: true,
+                        dropPincode: true,
+                        preferredCommunicationMode: true,
+                        arrivalMode: true,
+                        checkInNotes: true,
+                        checkInSlipNumber: true,
+                        checkInDate: true,
+                        checkInTime: true,
+                    }
+                },
+                assignedEngineer: {
+                    select: {
+                        id: true,
+                        name: true,
+                    }
+                },
                 items: true,
                 partsRequests: {
                     include: { items: true }
