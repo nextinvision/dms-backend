@@ -46,17 +46,28 @@ export class InvoicesService {
         const sgst = gstTotal / 2;
         const grandTotal = subtotal + gstTotal;
 
+        // Extract items and invoiceType from DTO to avoid spreading them into the data object
+        const { items: invoiceItems, invoiceType: dtoInvoiceType, ...invoiceData } = createInvoiceDto;
+
+        // Determine invoice type
+        const finalInvoiceType: 'OTC_ORDER' | 'JOB_CARD' = dtoInvoiceType || (createInvoiceDto.jobCardId ? 'JOB_CARD' : 'OTC_ORDER');
+
         return this.prisma.invoice.create({
             data: {
-                ...createInvoiceDto,
+                serviceCenterId: invoiceData.serviceCenterId,
+                customerId: invoiceData.customerId,
+                vehicleId: invoiceData.vehicleId,
+                jobCardId: invoiceData.jobCardId || null,
+                placeOfSupply: invoiceData.placeOfSupply || null,
                 invoiceNumber,
+                invoiceType: finalInvoiceType,
                 subtotal,
                 cgst,
                 sgst,
                 grandTotal,
                 status: 'UNPAID',
                 items: {
-                    create: items,
+                    create: invoiceItems,
                 },
             },
             include: {
@@ -73,6 +84,7 @@ export class InvoicesService {
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
         if (status) where.status = status;
         if (customerId) where.customerId = customerId;
+        if (query.invoiceType) where.invoiceType = query.invoiceType;
 
         const [data, total] = await Promise.all([
             this.prisma.invoice.findMany({

@@ -15,32 +15,63 @@ export class QuotationsService {
     ) { }
 
     async create(createQuotationDto: CreateQuotationDto) {
-        const { serviceCenterId, items, discount = 0, ...rest } = createQuotationDto;
+        const {
+            serviceCenterId,
+            customerId,
+            vehicleId,
+            items,
+            discount = 0,
+            appointmentId,
+            jobCardId,
+            quotationDate,
+            validUntil,
+            documentType,
+            hasInsurance,
+            insurerId,
+            insuranceStartDate,
+            insuranceEndDate,
+            batterySerialNumber,
+            customNotes,
+            notes,
+            noteTemplateId,
+            leadId: inputLeadId,
+            // Exclude computed fields that shouldn't be in Prisma input
+            quotationNumber: _quotationNumber,
+            subtotal: _subtotal,
+            discountPercent: _discountPercent,
+            preGstAmount: _preGstAmount,
+            cgst: _cgst,
+            sgst: _sgst,
+            igst: _igst,
+            totalAmount: _totalAmount,
+            status: _status,
+            ...rest
+        } = createQuotationDto;
 
         // Check if vehicle has an active job card and enforce linkage
         const vehicle = await this.prisma.vehicle.findUnique({
-            where: { id: rest.vehicleId },
+            where: { id: vehicleId },
             select: { currentStatus: true, activeJobCardId: true }
         });
 
-        if (vehicle?.currentStatus === 'ACTIVE_JOB_CARD' && !rest.jobCardId) {
+        if (vehicle?.currentStatus === 'ACTIVE_JOB_CARD' && !jobCardId) {
             throw new BadRequestException(`Vehicle has an active Job Card (${vehicle.activeJobCardId}). Quotation must be linked to it.`);
         }
 
         // Check if quotation already exists for this appointment or job card with the same documentType
-        if (rest.appointmentId || rest.jobCardId) {
+        if (appointmentId || jobCardId) {
             const existingQuotation = await this.prisma.quotation.findFirst({
                 where: {
-                    documentType: rest.documentType || 'Quotation',
+                    documentType: documentType || 'Quotation',
                     OR: [
-                        { appointmentId: rest.appointmentId || undefined },
-                        { jobCardId: rest.jobCardId || undefined },
+                        { appointmentId: appointmentId || undefined },
+                        { jobCardId: jobCardId || undefined },
                     ].filter(cond => cond[Object.keys(cond)[0]] !== undefined)
                 }
             });
 
             if (existingQuotation) {
-                throw new BadRequestException(`A ${rest.documentType || 'Quotation'} already exists for this appointment or job card`);
+                throw new BadRequestException(`A ${documentType || 'Quotation'} already exists for this appointment or job card`);
             }
         }
 
@@ -63,6 +94,21 @@ export class QuotationsService {
 
         const quotationNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
+        // Auto-link to existing open lead if not provided
+        let leadId = inputLeadId;
+        if (!leadId) {
+            const existingLead = await this.prisma.lead.findFirst({
+                where: {
+                    customerId: createQuotationDto.customerId,
+                    status: { in: ['NEW', 'IN_DISCUSSION'] }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+            if (existingLead) {
+                leadId = existingLead.id;
+            }
+        }
+
         // Calculate totals
         const subtotal = items.reduce((acc, item) => acc + item.rate * item.quantity, 0);
         const gstTotal = items.reduce((acc, item) => {
@@ -79,11 +125,25 @@ export class QuotationsService {
         const igst = 0; // In production, calculate based on customer state
         const totalAmount = preGstAmount + gstTotal;
 
-        return this.prisma.quotation.create({
+        const createdQuotation = await this.prisma.quotation.create({
             data: {
-                ...rest,
                 serviceCenterId,
+                customerId,
+                vehicleId,
+                appointmentId: appointmentId || null,
+                jobCardId: jobCardId || null,
                 quotationNumber,
+                documentType: documentType || 'Quotation',
+                quotationDate: quotationDate ? new Date(quotationDate) : new Date(),
+                validUntil: validUntil ? new Date(validUntil) : null,
+                hasInsurance: hasInsurance || false,
+                insurerId: insurerId || null,
+                insuranceStartDate: insuranceStartDate ? new Date(insuranceStartDate) : null,
+                insuranceEndDate: insuranceEndDate ? new Date(insuranceEndDate) : null,
+                batterySerialNumber: batterySerialNumber || null,
+                customNotes: customNotes || notes || null,
+                noteTemplateId: noteTemplateId || null,
+                leadId: leadId || null,
                 subtotal,
                 preGstAmount,
                 cgst,
@@ -97,17 +157,14 @@ export class QuotationsService {
                     create: items.map((item: any, index: number) => ({
                         serialNumber: item.serialNumber || index + 1,
                         partName: item.partName,
-                        partNumber: item.partNumber,
+                        partNumber: item.partNumber || null,
+                        hsnSacCode: item.hsnSacCode || null,
                         quantity: item.quantity,
                         rate: item.rate,
                         gstPercent: item.gstPercent,
                         amount: item.amount || (item.rate * item.quantity * (1 + (item.gstPercent || 18) / 100)),
                     })),
                 },
-                // Handle optional dates
-                quotationDate: rest.quotationDate ? new Date(rest.quotationDate) : new Date(),
-                insuranceStartDate: rest.insuranceStartDate ? new Date(rest.insuranceStartDate) : undefined,
-                insuranceEndDate: rest.insuranceEndDate ? new Date(rest.insuranceEndDate) : undefined,
             },
             include: {
                 items: true,
@@ -115,6 +172,25 @@ export class QuotationsService {
                 vehicle: true,
             },
         });
+
+        // Link to Lead if leadId is present (Fix for relational issue)
+        if (leadId) {
+            try {
+                await this.prisma.lead.update({
+                    where: { id: leadId },
+                    data: {
+                        quotationId: createdQuotation.id,
+                        convertedTo: 'quotation',
+                        convertedId: createdQuotation.id,
+                        status: 'IN_DISCUSSION' // Update status to reflect engagement
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to link quotation to lead:', error);
+            }
+        }
+
+        return createdQuotation;
     }
 
     async passToManager(id: string, managerId: string) {
@@ -410,6 +486,44 @@ export class QuotationsService {
                 whatsappSentAt: new Date(),
             },
         });
+
+        // Update linked Lead if exists, or try to find one
+        let leadId = quotation.leadId;
+        if (!leadId && quotation.customerId) {
+            // Try to find an open lead
+            const existingLead = await this.prisma.lead.findFirst({
+                where: {
+                    customerId: quotation.customerId,
+                    status: { in: ['NEW', 'IN_DISCUSSION'] }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            if (existingLead) {
+                leadId = existingLead.id;
+                // Link quotation to this lead
+                await this.prisma.quotation.update({
+                    where: { id },
+                    data: { leadId }
+                });
+            }
+        }
+
+        if (leadId) {
+            try {
+                await this.prisma.lead.update({
+                    where: { id: leadId },
+                    data: {
+                        status: 'IN_DISCUSSION', // Ensure status reflects active discussion
+                        quotationId: quotation.id, // Ensure link is reinforced
+                        convertedTo: 'quotation',
+                        convertedId: quotation.id
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to update linked lead:', error);
+            }
+        }
 
         return {
             success: true,

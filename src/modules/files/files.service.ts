@@ -16,33 +16,59 @@ export class FilesService {
     const isTemp = createFileDto.relatedEntityId?.startsWith('TEMP_');
 
     // Prepare foreign keys for the database relations
-    let appointmentId: string | undefined;
-    let jobCardId: string | undefined;
-    let vehicleId: string | undefined;
-    let customerId: string | undefined;
+    let appointmentId: string | undefined = createFileDto.appointmentId;
+    let jobCardId: string | undefined = createFileDto.jobCardId;
+    let vehicleId: string | undefined = createFileDto.vehicleId;
+    let customerId: string | undefined = createFileDto.customerId;
 
     if (!isTemp && createFileDto.relatedEntityId) {
       const type = createFileDto.relatedEntityType?.toString().toLowerCase();
 
-      if (type === 'appointment') appointmentId = createFileDto.relatedEntityId;
-      else if (type === 'job_card') jobCardId = createFileDto.relatedEntityId;
-      else if (type === 'vehicle') vehicleId = createFileDto.relatedEntityId;
-      else if (type === 'customer') customerId = createFileDto.relatedEntityId;
+      // Only auto-map if not already explicitly provided
+      if (type === 'appointment' && !appointmentId) appointmentId = createFileDto.relatedEntityId;
+      else if (type === 'job_card' && !jobCardId) jobCardId = createFileDto.relatedEntityId;
+      else if (type === 'vehicle' && !vehicleId) vehicleId = createFileDto.relatedEntityId;
+      else if (type === 'customer' && !customerId) customerId = createFileDto.relatedEntityId;
     }
 
     try {
+      // Check if file with this publicId already exists
+      if (createFileDto.publicId) {
+        const existingFile = await this.prisma.file.findUnique({
+          where: { publicId: createFileDto.publicId },
+        });
+
+        if (existingFile) {
+          // Update existing file with new relations if needed
+          return await this.prisma.file.update({
+            where: { id: existingFile.id },
+            data: {
+              appointmentId,
+              jobCardId,
+              vehicleId,
+              customerId,
+              relatedEntityId: createFileDto.relatedEntityId,
+              relatedEntityType: createFileDto.relatedEntityType,
+            },
+          });
+        }
+      }
+
       return await this.prisma.file.create({
         data: {
           url: createFileDto.url,
           filename: createFileDto.filename,
           format: createFileDto.format,
           bytes: createFileDto.bytes,
+          width: createFileDto.width,
+          height: createFileDto.height,
+          duration: createFileDto.duration,
           category: createFileDto.category,
           relatedEntityId: createFileDto.relatedEntityId,
           relatedEntityType: createFileDto.relatedEntityType,
           uploadedBy: createFileDto.uploadedBy,
           metadata: createFileDto.metadata || {},
-          publicId: null, // Explicitly null as we no longer use Cloudinary
+          publicId: createFileDto.publicId || null,
 
           // Map relations
           appointmentId,
@@ -162,8 +188,12 @@ export class FilesService {
       }
 
       // Local Windows Development Override
-      if (process.platform === 'win32') {
-        baseDir = path.join(process.cwd(), '../dms-frontend/public/uploads');
+      try {
+        if (process.platform === 'win32') {
+          baseDir = path.join(process.cwd(), '../dms-frontend/public/uploads');
+        }
+      } catch (e) {
+        console.warn('Failed to detect Windows environment:', e);
       }
 
       // Extract filename from URL (e.g., /uploads/file-123.jpg -> file-123.jpg)
@@ -201,9 +231,13 @@ export class FilesService {
       }
 
       // Local Windows Development Override
-      if (process.platform === 'win32') {
-        // Save to frontend public/uploads for immediate serving
-        baseDir = path.join(process.cwd(), '../dms-frontend/public/uploads');
+      try {
+        if (process.platform === 'win32') {
+          // Save to frontend public/uploads for immediate serving
+          baseDir = path.join(process.cwd(), '../dms-frontend/public/uploads');
+        }
+      } catch (e) {
+        console.warn('Failed to detect Windows environment:', e);
       }
 
       // Ensure directory exists
