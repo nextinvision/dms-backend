@@ -6,16 +6,21 @@ import { DispatchPartsIssueDto } from './dto/dispatch-parts-issue.dto';
 @Injectable()
 export class PartsIssuesService {
     private readonly logger = new Logger(PartsIssuesService.name);
-    
+
     constructor(private prisma: PrismaService) { }
 
     /**
      * Helper method to check if an item is fully fulfilled
+     * An item is considered fully fulfilled when the issued quantity exactly matches the requested quantity
+     * @param issuedQty - The total quantity that has been issued/dispatched
+     * @param requestedQty - The original requested quantity (never modified after creation)
+     * @returns true if issuedQty exactly equals requestedQty
      */
-    private isItemFullyFulfilled(issuedQty: number, approvedQty: number): boolean {
-        if (approvedQty <= 0) return false;
-        // Use Math.abs to handle floating point precision issues (allow 0.01 tolerance)
-        return issuedQty >= approvedQty && Math.abs(issuedQty - approvedQty) < 0.01;
+    private isItemFullyFulfilled(issuedQty: number, requestedQty: number): boolean {
+        if (requestedQty <= 0) return false;
+        // Use exact equality check - "C" postfix should only appear when request is FULLY fulfilled
+        // Allow small tolerance for floating point precision (0.01)
+        return Math.abs(issuedQty - requestedQty) < 0.01;
     }
 
     /**
@@ -30,11 +35,11 @@ export class PartsIssuesService {
         const partNumberMatch = partNumber1 && partNumber2
             ? partNumber1.toLowerCase().trim() === partNumber2.toLowerCase().trim()
             : false;
-        
+
         const partNameMatch = partName1 && partName2
             ? partName1.toLowerCase().trim() === partName2.toLowerCase().trim()
             : false;
-        
+
         // Both must match for validation to pass
         return partNumberMatch && partNameMatch;
     }
@@ -70,7 +75,7 @@ export class PartsIssuesService {
                             return null; // Reject if mismatch
                         }
                     }
-                    
+
                     this.logger.debug(`Found part by ID: ${identifier.id} -> ${part.partName}`);
                     return part;
                 }
@@ -80,11 +85,11 @@ export class PartsIssuesService {
         }
 
         // 2. If both partNumber AND partName are provided, require BOTH to match
-        if (identifier.partNumber && identifier.partNumber.trim() && 
+        if (identifier.partNumber && identifier.partNumber.trim() &&
             identifier.partName && identifier.partName.trim()) {
             try {
                 const part = await tx.centralInventory.findFirst({
-                    where: { 
+                    where: {
                         AND: [
                             {
                                 partNumber: {
@@ -110,7 +115,7 @@ export class PartsIssuesService {
                 }
             } catch (error) {
                 this.logger.warn(
-                    `Error finding part by partNumber AND partName ${identifier.partNumber}/${identifier.partName}:`, 
+                    `Error finding part by partNumber AND partName ${identifier.partNumber}/${identifier.partName}:`,
                     error
                 );
             }
@@ -120,7 +125,7 @@ export class PartsIssuesService {
         if (identifier.partNumber && identifier.partNumber.trim() && !identifier.partName) {
             try {
                 const part = await tx.centralInventory.findFirst({
-                    where: { 
+                    where: {
                         partNumber: {
                             equals: identifier.partNumber.trim(),
                             mode: 'insensitive'
@@ -141,7 +146,7 @@ export class PartsIssuesService {
         if (identifier.partName && identifier.partName.trim() && !identifier.partNumber) {
             try {
                 const part = await tx.centralInventory.findFirst({
-                    where: { 
+                    where: {
                         partName: {
                             equals: identifier.partName.trim(),
                             mode: 'insensitive'
@@ -162,7 +167,7 @@ export class PartsIssuesService {
         if (identifier.partName && identifier.partName.trim() && !identifier.partNumber) {
             try {
                 const part = await tx.centralInventory.findFirst({
-                    where: { 
+                    where: {
                         partName: {
                             contains: identifier.partName.trim(),
                             mode: 'insensitive'
@@ -206,8 +211,8 @@ export class PartsIssuesService {
 
         return this.prisma.$transaction(async (tx) => {
             // Resolve all parts by ID, partNumber, or partName (flexible matching)
-            const resolvedItems: Array<{ 
-                originalItem: any; 
+            const resolvedItems: Array<{
+                originalItem: any;
                 resolvedPart: { id: string; partName: string; partNumber: string | null };
             }> = [];
 
@@ -229,45 +234,45 @@ export class PartsIssuesService {
                         where: { id: item.centralInventoryPartId },
                         select: { id: true }
                     });
-                    
+
                     if (!partExists) {
                         // Part doesn't exist - check if we can find similar parts
                         let similarParts: any[] = [];
-                        
+
                         if (item.partNumber) {
                             similarParts = await tx.centralInventory.findMany({
-                                where: { 
+                                where: {
                                     partNumber: { contains: item.partNumber, mode: 'insensitive' }
                                 },
                                 take: 5,
                                 select: { id: true, partName: true, partNumber: true }
                             });
                         }
-                        
+
                         if (similarParts.length === 0 && item.partName) {
                             similarParts = await tx.centralInventory.findMany({
-                                where: { 
+                                where: {
                                     partName: { contains: item.partName, mode: 'insensitive' }
                                 },
                                 take: 5,
                                 select: { id: true, partName: true, partNumber: true }
                             });
                         }
-                        
+
                         const identifier = item.partNumber || item.partName || item.centralInventoryPartId;
                         let errorMsg = `Part not found: ${identifier}. The part may have been deleted.`;
-                        
+
                         if (similarParts.length > 0) {
                             errorMsg += ` Similar parts found: ${similarParts.map(p => p.partName).join(', ')}.`;
                         }
-                        
+
                         errorMsg += ' Please refresh the page and try again.';
-                        
+
                         this.logger.error(
                             `Part not found. ID=${item.centralInventoryPartId}, ` +
                             `partNumber=${item.partNumber || 'N/A'}, partName=${item.partName || 'N/A'}`
                         );
-                        
+
                         throw new BadRequestException(errorMsg);
                     } else {
                         // Part exists but matching failed - this shouldn't happen
@@ -281,14 +286,13 @@ export class PartsIssuesService {
                 }
 
                 resolvedItems.push({ originalItem: item, resolvedPart });
-                
+
                 this.logger.debug(
                     `✓ Resolved part: ${item.centralInventoryPartId} -> ${resolvedPart.id} ` +
                     `(${resolvedPart.partName}${resolvedPart.partNumber ? ` - ${resolvedPart.partNumber}` : ''})`
                 );
             }
 
-            // Create issue with resolved part IDs
             // Log each item's requestedQty before creating to ensure correct values
             for (const { originalItem, resolvedPart } of resolvedItems) {
                 this.logger.log(
@@ -296,7 +300,73 @@ export class PartsIssuesService {
                     `(ID: ${resolvedPart.id}), requestedQty=${originalItem.requestedQty}`
                 );
             }
-            
+
+            // CRITICAL: If Purchase Order is linked, override requestedQty with PO quantities BEFORE creating issueData
+            // This ensures that requestedQty reflects what SIM originally ordered, not what's being issued
+            if (createDto.purchaseOrderId) {
+                this.logger.log(`Parts Issue linked to Purchase Order: ${createDto.purchaseOrderId}`);
+
+                // Fetch Purchase Order with items
+                const purchaseOrder = await tx.purchaseOrder.findUnique({
+                    where: { id: createDto.purchaseOrderId },
+                    include: { items: true }
+                });
+
+                if (!purchaseOrder) {
+                    throw new BadRequestException(`Purchase Order ${createDto.purchaseOrderId} not found`);
+                }
+
+                // Match each parts issue item with corresponding PO item and override requestedQty
+                for (const { originalItem, resolvedPart } of resolvedItems) {
+                    // Find matching PO item by centralInventoryPartId, partNumber, or partName
+                    const matchingPOItem = purchaseOrder.items.find(poItem => {
+                        // Strategy 1: Match by centralInventoryPartId
+                        if (poItem.centralInventoryPartId &&
+                            poItem.centralInventoryPartId === resolvedPart.id) {
+                            return true;
+                        }
+                        // Strategy 2: Match by partName (case-insensitive)
+                        if (poItem.partName && resolvedPart.partName) {
+                            const poName = poItem.partName.toLowerCase().trim();
+                            const issueName = resolvedPart.partName.toLowerCase().trim();
+                            if (poName === issueName && poName !== '') {
+                                return true;
+                            }
+                        }
+                        // Strategy 3: Match by partNumber (case-insensitive)
+                        if (poItem.partNumber && resolvedPart.partNumber) {
+                            const poNumber = poItem.partNumber.toLowerCase().trim();
+                            const issueNumber = resolvedPart.partNumber.toLowerCase().trim();
+                            if (poNumber === issueNumber && poNumber !== '') {
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+
+                    if (matchingPOItem) {
+                        // Override requestedQty with PO quantity
+                        const poQuantity = Number(matchingPOItem.quantity);
+
+                        this.logger.log(
+                            `Matched PO item for \"${resolvedPart.partName}\": ` +
+                            `PO quantity=${poQuantity}, frontend sent=${originalItem.requestedQty}. ` +
+                            `Using PO quantity as requestedQty.`
+                        );
+
+                        // CRITICAL: Override requestedQty with PO quantity
+                        // This ensures requestedQty reflects what SIM originally ordered
+                        originalItem.requestedQty = poQuantity;
+                    } else {
+                        this.logger.warn(
+                            `No matching PO item found for \"${resolvedPart.partName}\" ` +
+                            `(${resolvedPart.partNumber || 'N/A'}). Using frontend quantity: ${originalItem.requestedQty}`
+                        );
+                    }
+                }
+            }
+
+            // Now build issueData with potentially overridden requestedQty values
             const issueData: any = {
                 toServiceCenterId: createDto.toServiceCenterId,
                 priority: createDto.priority || 'NORMAL',
@@ -312,25 +382,25 @@ export class PartsIssuesService {
                                 `Invalid requested quantity for part "${resolvedPart.partName}": ${originalItem.requestedQty}`
                             );
                         }
-                        
+
                         return {
                             centralInventoryPartId: resolvedPart.id, // Use resolved ID
-                            requestedQty: requestedQty // Ensure it's a valid number
+                            requestedQty: requestedQty // Now includes PO override if applicable
                         };
                     })
                 },
             };
-            
-            // Add purchaseOrderId if provided (using any to bypass Prisma type check until client is regenerated)
+
+            // Add purchaseOrderId if provided
             if (createDto.purchaseOrderId) {
                 issueData.purchaseOrderId = createDto.purchaseOrderId;
             }
-            
+
             const issue = await tx.partsIssue.create({
                 data: issueData,
                 include: { items: true },
             }) as any;
-            
+
             // Log created items to verify stored values
             this.logger.log(
                 `Created parts issue ${issueNumber} with ${issue.items.length} items. ` +
@@ -345,7 +415,7 @@ export class PartsIssuesService {
                         allocated: { increment: originalItem.requestedQty },
                     },
                 });
-                
+
                 this.logger.debug(
                     `Updated allocation for part "${resolvedPart.partName}" ` +
                     `(${resolvedPart.partNumber || 'N/A'}): allocated += ${originalItem.requestedQty}`
@@ -435,7 +505,7 @@ export class PartsIssuesService {
 
         issue.items = issue.items.map((item: any) => {
             const part = parts.find(p => p.id === item.centralInventoryPartId);
-            
+
             if (!part) {
                 return {
                     ...item,
@@ -449,23 +519,23 @@ export class PartsIssuesService {
             const requestedQty = Number(item.requestedQty || 0);
             const approvedQty = Number(item.approvedQty || 0);
             const issuedQty = Number(item.issuedQty || 0);
-            
+
             // Calculate available stock for approval/editing
             // Since requestedQty is already allocated when issue was created:
             // - Available for approval = stock - (allocated - requestedQty) = stock - allocated + requestedQty
             // - Available for dispatch = stock - allocated (actual physical stock available)
             const availableForApproval = stockQuantity - allocated + requestedQty;
             const availableForDispatch = stockQuantity - allocated;
-            
+
             // Calculate remaining quantity that can be dispatched
             const remainingToDispatch = Math.max(0, approvedQty - issuedQty);
-            
+
             // Check if item is fully fulfilled based on REQUESTED quantity (original request)
             // This ensures that if CIM approved less than requested, it won't show as fully fulfilled
             // even if all approved quantity is issued
             // Note: requestedQty is already declared above, so we reuse it
             const isFullyFulfilled = this.isItemFullyFulfilled(issuedQty, requestedQty);
-            
+
             return {
                 ...item,
                 centralInventoryPart: part,
@@ -518,7 +588,7 @@ export class PartsIssuesService {
             // Validate and update approved quantities (CIM can adjust quantities based on available stock)
             for (const appItem of approvedItems) {
                 const issueItem = issue.items.find((item: any) => item.id === appItem.itemId);
-                
+
                 if (!issueItem) {
                     throw new NotFoundException(`Parts issue item ${appItem.itemId} not found`);
                 }
@@ -538,7 +608,7 @@ export class PartsIssuesService {
                 const currentAllocated = Number(centralPart.allocated || 0);
                 const stockQuantity = Number(centralPart.stockQuantity);
                 const requestedQty = Number(issueItem.requestedQty);
-                
+
                 // Calculate actual available stock (accounting for current allocation which includes this request)
                 // If this request has requestedQty allocated, we can approve up to: stock - (allocated - requestedQty)
                 const availableStock = stockQuantity - currentAllocated + requestedQty;
@@ -569,10 +639,14 @@ export class PartsIssuesService {
                 // - Requested: 100, Available: 150, Approved: 80 ✅ (allowed - approve less than requested)
                 // No additional validation needed - we already validated it's >= 0 and <= availableStock
 
-                // Update approved quantity
+                // Update approved quantity ONLY - requestedQty must remain unchanged
+                // CRITICAL: requestedQty is immutable and should never be modified after creation
                 await tx.partsIssueItem.update({
                     where: { id: appItem.itemId },
-                    data: { approvedQty: appItem.approvedQty },
+                    data: {
+                        approvedQty: appItem.approvedQty,
+                        // requestedQty is intentionally NOT updated - it's immutable
+                    },
                 });
 
                 // Adjust allocation: unallocate the difference between requested and approved
@@ -617,7 +691,7 @@ export class PartsIssuesService {
     // Admin approval - can approve both PENDING_APPROVAL and CIM_APPROVED issues
     async approveByAdmin(id: string) {
         const issue = await this.findOne(id);
-        
+
         // Allow admin to approve both PENDING_APPROVAL (direct approval) and CIM_APPROVED (after CIM approval)
         if (issue.status !== 'PENDING_APPROVAL' && issue.status !== 'CIM_APPROVED') {
             throw new BadRequestException(
@@ -627,11 +701,11 @@ export class PartsIssuesService {
 
         return this.prisma.$transaction(async (tx) => {
             const issueItems = (issue as any).items;
-            
+
             // If admin approves directly from PENDING_APPROVAL, set approvedQty = requestedQty for all items
             // If admin approves from CIM_APPROVED, approvedQty is already set by CIM
             const needsApprovedQty = issue.status === 'PENDING_APPROVAL';
-            
+
             // Update items with approvedQty if needed (for direct admin approval)
             if (needsApprovedQty) {
                 for (const item of issueItems) {
@@ -646,7 +720,7 @@ export class PartsIssuesService {
                     }
                 }
             }
-            
+
             // Unallocate the requested quantity (allocated was set during creation)
             // This frees up the stock for dispatch
             for (const item of issueItems) {
@@ -712,15 +786,15 @@ export class PartsIssuesService {
     ): string {
         const date = new Date();
         const dateStr = `${date.getDate().toString().padStart(2, '0')}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getFullYear()}`;
-        
+
         // Extract code from issue number or use default
         // For now, using a simplified format - can be made configurable
         const code = '42EV'; // This can be made configurable or extracted from config
-        
-        const suffix = isFullyFulfilled 
-            ? `_${requestNumber}_${dispatchSequence}C` 
+
+        const suffix = isFullyFulfilled
+            ? `_${requestNumber}_${dispatchSequence}C`
             : `_${requestNumber}_${dispatchSequence}`;
-        
+
         // Format: PO {code} {date} {serviceCenterCode}{suffix}
         return `PO ${code} ${dateStr} ${serviceCenterCode}${suffix}`;
     }
@@ -731,11 +805,11 @@ export class PartsIssuesService {
             where: { id },
             select: { id: true, status: true, toServiceCenterId: true }
         });
-        
+
         if (!issue) {
             throw new NotFoundException('Parts issue not found');
         }
-        
+
         // Allow dispatch if ADMIN_APPROVED or if already partially dispatched (DISPATCHED status)
         if (issue.status !== 'ADMIN_APPROVED' && issue.status !== 'DISPATCHED') {
             throw new BadRequestException('Can only dispatch ADMIN_APPROVED or DISPATCHED issues. Issue must be approved by admin first.');
@@ -753,7 +827,7 @@ export class PartsIssuesService {
 
         return this.prisma.$transaction(async (tx) => {
             const dispatchDate = new Date();
-            
+
             // Get fresh issue data with current issuedQty values and purchaseOrderId
             const freshIssue = await tx.partsIssue.findUnique({
                 where: { id },
@@ -767,7 +841,7 @@ export class PartsIssuesService {
                     }
                 }
             }) as any;
-            
+
             if (!freshIssue) {
                 throw new NotFoundException('Parts issue not found');
             }
@@ -787,11 +861,11 @@ export class PartsIssuesService {
             for (const dispatchItem of dispatchDto.items) {
                 // Use fresh issue data to get current issuedQty
                 const issueItem = freshIssue.items.find(item => item.id === dispatchItem.itemId);
-                
+
                 if (!issueItem) {
                     throw new NotFoundException(`Parts issue item ${dispatchItem.itemId} not found`);
                 }
-                
+
                 // Get part details for logging
                 const part = parts.find(p => p.id === issueItem.centralInventoryPartId);
                 const partName = part?.partName || 'Unknown Part';
@@ -810,12 +884,12 @@ export class PartsIssuesService {
                 const approvedQty = Number(issueItem.approvedQty || issueItem.requestedQty || 0);
                 const issuedQty = Number(issueItem.issuedQty || 0);
                 const remainingQty = Math.max(0, approvedQty - issuedQty);
-                
+
                 this.logger.debug(
                     `Dispatch calculation for item ${issueItem.id} (${partName}): ` +
                     `approvedQty=${approvedQty}, issuedQty=${issuedQty}, remainingQty=${remainingQty}`
                 );
-                
+
                 // Validate dispatch quantity
                 if (dispatchItem.quantity <= 0) {
                     throw new BadRequestException(`Dispatch quantity must be greater than 0 for item ${issueItem.id}`);
@@ -842,12 +916,12 @@ export class PartsIssuesService {
                 const requestedQty = Number(issueItem.requestedQty || 0);
                 // Use the same approvedQty variable already calculated above
                 const newIssuedQty = currentIssuedQty + dispatchQty;
-                
+
                 // Check if item is fully fulfilled based on REQUESTED quantity (original request)
                 // This ensures that if CIM approved less than requested, it won't show as fully fulfilled
                 // even if all approved quantity is issued
                 const isItemFullyFulfilled = this.isItemFullyFulfilled(newIssuedQty, requestedQty);
-                
+
                 // Log fulfillment check with part name
                 this.logger.debug(
                     `Fulfillment check for "${partName}" (Item ID: ${issueItem.id}): ` +
@@ -864,10 +938,10 @@ export class PartsIssuesService {
                 });
 
                 const issueSequence = existingDispatches.length + 1;
-                
+
                 // Use issue number to extract request number (e.g., PI-2025-0001 -> 1)
                 const issueNumberParts = freshIssue.issueNumber.split('-');
-                const requestNumber = issueNumberParts.length > 0 ? 
+                const requestNumber = issueNumberParts.length > 0 ?
                     parseInt(issueNumberParts[issueNumberParts.length - 1]) || 1 : 1;
 
                 // Generate sub-PO number for ALL dispatches (including partial)
@@ -893,14 +967,25 @@ export class PartsIssuesService {
                     }
                 });
 
-                // Update issue item
+                // Update issue item with issued quantity and sub-PO number
+                // CRITICAL: Never modify requestedQty - it must remain unchanged from creation
                 await tx.partsIssueItem.update({
                     where: { id: issueItem.id },
                     data: {
                         issuedQty: newIssuedQty,
                         subPoNumber, // Update latest sub-PO number
+                        // requestedQty is intentionally NOT updated - it's immutable
                     }
                 });
+
+                // Log the update with fulfillment details for debugging
+                this.logger.log(
+                    `Updated PartsIssueItem ${issueItem.id} (${partName}): ` +
+                    `requestedQty=${requestedQty} (unchanged), ` +
+                    `issuedQty=${currentIssuedQty} -> ${newIssuedQty}, ` +
+                    `subPoNumber=${subPoNumber}, ` +
+                    `isFullyFulfilled=${isItemFullyFulfilled}`
+                );
 
                 // Decrease central inventory stock when dispatching
                 await tx.centralInventory.update({
@@ -909,7 +994,7 @@ export class PartsIssuesService {
                         stockQuantity: { decrement: dispatchItem.quantity },
                     }
                 });
-                
+
                 // Update Purchase Order receivedQty if this parts issue is linked to a PO
                 const purchaseOrderId = (freshIssue as any).purchaseOrderId;
                 if (purchaseOrderId) {
@@ -918,11 +1003,11 @@ export class PartsIssuesService {
                         where: { purchaseOrderId: purchaseOrderId },
                         include: { purchaseOrder: true }
                     });
-                    
+
                     // Match PO item to parts issue item using multiple strategies
                     const matchingPOItem = poItems.find(poItem => {
                         // Strategy 1: Match by centralInventoryPartId
-                        if (poItem.centralInventoryPartId && 
+                        if (poItem.centralInventoryPartId &&
                             poItem.centralInventoryPartId === issueItem.centralInventoryPartId) {
                             return true;
                         }
@@ -944,7 +1029,7 @@ export class PartsIssuesService {
                         }
                         return false;
                     });
-                    
+
                     if (matchingPOItem) {
                         // Update PO item's receivedQty by adding the dispatched quantity
                         // receivedQty should accumulate all issued quantities from CIM
@@ -954,7 +1039,7 @@ export class PartsIssuesService {
                                 receivedQty: { increment: dispatchItem.quantity }
                             }
                         });
-                        
+
                         this.logger.log(
                             `Updated PO ${purchaseOrderId} item ${matchingPOItem.id} ` +
                             `(${partName}): receivedQty += ${dispatchItem.quantity}`
@@ -1002,9 +1087,14 @@ export class PartsIssuesService {
 
         return this.prisma.$transaction(async (tx) => {
             for (const rxItem of receivedItems) {
+                // Update received quantity ONLY - requestedQty must remain unchanged
+                // CRITICAL: requestedQty is immutable and should never be modified
                 await tx.partsIssueItem.update({
                     where: { id: rxItem.itemId },
-                    data: { receivedQty: rxItem.receivedQty },
+                    data: {
+                        receivedQty: rxItem.receivedQty,
+                        // requestedQty is intentionally NOT updated - it's immutable
+                    },
                 });
 
                 // Update Service Center Inventory: stockQuantity += receivedQty
