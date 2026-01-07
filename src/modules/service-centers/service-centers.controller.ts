@@ -6,6 +6,8 @@ import {
     Patch,
     Param,
     UseGuards,
+    Request,
+    BadRequestException,
 } from '@nestjs/common';
 import { ServiceCentersService } from './service-centers.service';
 import { CreateServiceCenterDto } from './dto/create-service-center.dto';
@@ -40,5 +42,15 @@ export class ServiceCentersController {
     @Roles('admin')
     update(@Param('id') id: string, @Body() data: any) {
         return this.scService.update(id, data);
+    }
+
+    @Patch(':id/appointment-settings')
+    @Roles('admin', 'sc_manager')
+    updateAppointmentSettings(@Param('id') id: string, @Body() data: { maxAppointmentsPerDay?: number }, @Request() req: any) {
+        // If SC manager, ensure they can only update their own service center
+        if (req.user.role === 'sc_manager' && req.user.serviceCenterId !== id) {
+            throw new BadRequestException('You can only update your own service center settings');
+        }
+        return this.scService.update(id, { maxAppointmentsPerDay: data.maxAppointmentsPerDay });
     }
 }

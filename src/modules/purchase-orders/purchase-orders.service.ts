@@ -160,6 +160,18 @@ export class PurchaseOrdersService {
                             inventoryPart: true,
                         },
                     },
+                    partsIssues: {
+                        include: {
+                            items: {
+                                include: {
+                                    dispatches: {
+                                        orderBy: { dispatchedAt: 'desc' }
+                                    }
+                                }
+                            }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    },
                 },
                 orderBy: { createdAt: 'desc' },
             }),
@@ -188,6 +200,18 @@ export class PurchaseOrdersService {
                     include: {
                         inventoryPart: true,
                     },
+                },
+                partsIssues: {
+                    include: {
+                        items: {
+                            include: {
+                                dispatches: {
+                                    orderBy: { dispatchedAt: 'desc' }
+                                }
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' }
                 },
             },
         });

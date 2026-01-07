@@ -442,6 +442,12 @@ export class PartsIssuesService {
                 include: {
                     toServiceCenter: true,
                     requestedBy: true,
+                    purchaseOrder: {
+                        select: {
+                            id: true,
+                            poNumber: true,
+                        }
+                    },
                     items: {
                         include: {
                             dispatches: {
@@ -477,6 +483,12 @@ export class PartsIssuesService {
             include: {
                 toServiceCenter: true,
                 requestedBy: true,
+                purchaseOrder: {
+                    select: {
+                        id: true,
+                        poNumber: true,
+                    }
+                },
                 items: {
                     include: {
                         dispatches: {
@@ -1167,5 +1179,50 @@ export class PartsIssuesService {
                 },
             });
         });
+    }
+
+    /**
+     * Update transport details for a dispatched parts issue
+     * Only allowed for DISPATCHED or ADMIN_APPROVED status issues
+     */
+    async updateTransportDetails(id: string, transportDetails: any) {
+        const issue = await this.findOne(id);
+        
+        // Only allow updating transport details for dispatched or admin-approved issues
+        if (issue.status !== 'DISPATCHED' && issue.status !== 'ADMIN_APPROVED') {
+            throw new BadRequestException('Can only update transport details for dispatched or admin-approved issues');
+        }
+
+        // Update transport details on the parts issue
+        const updatedIssue = await this.prisma.partsIssue.update({
+            where: { id },
+            data: {
+                transportDetails: transportDetails || {},
+            },
+            include: {
+                toServiceCenter: true,
+                requestedBy: true,
+                purchaseOrder: true,
+                items: {
+                    include: {
+                        dispatches: {
+                            orderBy: { dispatchedAt: 'asc' }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Also update transport details on all dispatch records
+        if (transportDetails) {
+            await this.prisma.partsIssueDispatch.updateMany({
+                where: { issueId: id },
+                data: {
+                    transportDetails: transportDetails,
+                }
+            });
+        }
+
+        return updatedIssue;
     }
 }
