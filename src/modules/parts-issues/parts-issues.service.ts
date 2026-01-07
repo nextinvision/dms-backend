@@ -288,7 +288,7 @@ export class PartsIssuesService {
                 resolvedItems.push({ originalItem: item, resolvedPart });
 
                 this.logger.debug(
-                    `✓ Resolved part: ${item.centralInventoryPartId} -> ${resolvedPart.id} ` +
+                    `âœ“ Resolved part: ${item.centralInventoryPartId} -> ${resolvedPart.id} ` +
                     `(${resolvedPart.partName}${resolvedPart.partNumber ? ` - ${resolvedPart.partNumber}` : ''})`
                 );
             }
@@ -428,38 +428,41 @@ export class PartsIssuesService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, status, toServiceCenterId } = query;
-        const skip = (page - 1) * limit;
+        // Parse pagination parameters correctly
+        const pageNum = parseInt(String(page), 10);
+        const limitNum = parseInt(String(limit), 10);
+        const skip = (pageNum - 1) * limitNum;
 
         const where: any = {};
         if (status) where.status = status;
         if (toServiceCenterId) where.toServiceCenterId = toServiceCenterId;
 
-        const [data, total] = await Promise.all([
-            this.prisma.partsIssue.findMany({
-                where,
-                skip: Number(skip),
-                take: Number(limit),
-                include: {
-                    toServiceCenter: true,
-                    requestedBy: true,
-                    purchaseOrder: {
-                        select: {
-                            id: true,
-                            poNumber: true,
-                        }
-                    },
-                    items: {
-                        include: {
-                            dispatches: {
-                                orderBy: { dispatchedAt: 'asc' }
-                            }
-                        }
-                    },
+        // Execute sequentially to prevent connection pool exhaustion
+        const total = await this.prisma.partsIssue.count({ where });
+
+        const data = await this.prisma.partsIssue.findMany({
+            where,
+            skip,
+            take: limitNum,
+            include: {
+                toServiceCenter: true,
+                requestedBy: true,
+                purchaseOrder: {
+                    select: {
+                        id: true,
+                        poNumber: true,
+                    }
                 },
-                orderBy: { createdAt: 'desc' },
-            }),
-            this.prisma.partsIssue.count({ where }),
-        ]);
+                items: {
+                    include: {
+                        dispatches: {
+                            orderBy: { dispatchedAt: 'asc' }
+                        }
+                    }
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
 
         // Manually populate centralInventoryPart for each item
         for (const issue of data) {
@@ -470,12 +473,14 @@ export class PartsIssuesService {
             data,
             pagination: {
                 total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
             },
         };
     }
+
+
 
     async findOne(id: string) {
         const issue = await this.prisma.partsIssue.findUnique({
@@ -646,9 +651,9 @@ export class PartsIssuesService {
 
                 // Explicitly allow approving less than requested - this is a valid and expected use case
                 // Examples:
-                // - Requested: 100, Available: 50, Approved: 50 ✅ (allowed - partial approval)
-                // - Requested: 100, Available: 50, Approved: 0 ✅ (allowed - reject item)
-                // - Requested: 100, Available: 150, Approved: 80 ✅ (allowed - approve less than requested)
+                // - Requested: 100, Available: 50, Approved: 50 âœ… (allowed - partial approval)
+                // - Requested: 100, Available: 50, Approved: 0 âœ… (allowed - reject item)
+                // - Requested: 100, Available: 150, Approved: 80 âœ… (allowed - approve less than requested)
                 // No additional validation needed - we already validated it's >= 0 and <= availableStock
 
                 // Update approved quantity ONLY - requestedQty must remain unchanged

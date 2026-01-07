@@ -382,6 +382,7 @@ model JobCardItem {
   itemType        String // "part" | "work_item"
   serialNumber    String?
   isWarranty      Boolean @default(false)
+  inventoryPartId String?
 
   @@index([jobCardId])
 }
@@ -413,7 +414,9 @@ model PartsRequestItem {
   id              String       @id @default(uuid())
   requestId       String
   request         PartsRequest @relation(fields: [requestId], references: [id])
-  inventoryPartId String
+  inventoryPartId String?
+  partName        String
+  partNumber      String?
   requestedQty    Int
   approvedQty     Int          @default(0)
   isWarranty      Boolean      @default(false)

@@ -40,9 +40,16 @@ export class UsersService {
     }
 
     async findAll(query: any) {
-        const { serviceCenterId, role } = query;
+        const { serviceCenterId, role, includeJobCards } = query;
         const where: any = {};
-        if (serviceCenterId) where.serviceCenterId = serviceCenterId;
+        if (serviceCenterId) {
+            const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(serviceCenterId);
+            if (isUuid) {
+                where.serviceCenterId = serviceCenterId;
+            } else {
+                where.serviceCenter = { code: serviceCenterId };
+            }
+        }
         if (role) where.role = role;
 
         const users = await this.prisma.user.findMany({
@@ -55,6 +62,22 @@ export class UsersService {
                 serviceCenterId: true,
                 phone: true,
                 createdAt: true,
+                jobCards: includeJobCards === 'true' ? {
+                    select: {
+                        id: true,
+                        jobCardNumber: true,
+                        status: true,
+                        updatedAt: true,
+                        createdAt: true,
+                        vehicle: {
+                            select: {
+                                registration: true,
+                                vehicleMake: true,
+                                vehicleModel: true,
+                            }
+                        }
+                    }
+                } : undefined,
             },
         });
 

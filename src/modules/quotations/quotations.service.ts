@@ -2,17 +2,24 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { PdfGeneratorService } from '../pdf-generator/pdf-generator.service';
+import { FilesService } from '../files/files.service';
+import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
 
 @Injectable()
 export class QuotationsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private pdfGenerator: PdfGeneratorService,
+        private filesService: FilesService,
+    ) { }
 
     async create(createQuotationDto: CreateQuotationDto) {
-        const { 
-            serviceCenterId, 
-            customerId, 
+        const {
+            serviceCenterId,
+            customerId,
             vehicleId,
-            items, 
+            items,
             discount = 0,
             appointmentId,
             jobCardId,
@@ -27,7 +34,7 @@ export class QuotationsService {
             customNotes,
             notes,
             noteTemplateId,
-            leadId,
+            leadId: inputLeadId,
             // Exclude computed fields that shouldn't be in Prisma input
             quotationNumber: _quotationNumber,
             subtotal: _subtotal,
@@ -38,7 +45,7 @@ export class QuotationsService {
             igst: _igst,
             totalAmount: _totalAmount,
             status: _status,
-            ...rest 
+            ...rest
         } = createQuotationDto;
 
         // Check if vehicle has an active job card and enforce linkage
@@ -87,6 +94,21 @@ export class QuotationsService {
 
         const quotationNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
+        // Auto-link to existing open lead if not provided
+        let leadId = inputLeadId;
+        if (!leadId) {
+            const existingLead = await this.prisma.lead.findFirst({
+                where: {
+                    customerId: createQuotationDto.customerId,
+                    status: { in: ['NEW', 'IN_DISCUSSION'] }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+            if (existingLead) {
+                leadId = existingLead.id;
+            }
+        }
+
         // Calculate totals
         const subtotal = items.reduce((acc, item) => acc + item.rate * item.quantity, 0);
         const gstTotal = items.reduce((acc, item) => {
@@ -103,7 +125,7 @@ export class QuotationsService {
         const igst = 0; // In production, calculate based on customer state
         const totalAmount = preGstAmount + gstTotal;
 
-        return this.prisma.quotation.create({
+        const createdQuotation = await this.prisma.quotation.create({
             data: {
                 serviceCenterId,
                 customerId,
@@ -150,6 +172,25 @@ export class QuotationsService {
                 vehicle: true,
             },
         });
+
+        // Link to Lead if leadId is present (Fix for relational issue)
+        if (leadId) {
+            try {
+                await this.prisma.lead.update({
+                    where: { id: leadId },
+                    data: {
+                        quotationId: createdQuotation.id,
+                        convertedTo: 'quotation',
+                        convertedId: createdQuotation.id,
+                        status: 'IN_DISCUSSION' // Update status to reflect engagement
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to link quotation to lead:', error);
+            }
+        }
+
+        return createdQuotation;
     }
 
     async passToManager(id: string, managerId: string) {
@@ -164,44 +205,33 @@ export class QuotationsService {
         });
     }
 
-    async updateCustomerApproval(id: string, data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
-        await this.findOne(id);
-        return this.prisma.quotation.update({
-            where: { id },
-            data: {
-                customerApprovalStatus: data.status,
-                customerRejectionReason: data.reason,
-                customerApprovedAt: new Date(),
-            },
-        });
-    }
-
 
     async findAll(query: any) {
         const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId } = query;
-        const skip = calculateSkip(page, parseInt(limit));
+        const take = parseInt(limit) || 20;
+        const skip = calculateSkip(page, take);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
         if (status) where.status = status;
         if (customerId) where.customerId = customerId;
 
-        const [data, total] = await Promise.all([
-            this.prisma.quotation.findMany({
-                where,
-                skip,
-                take: parseInt(limit),
-                include: {
-                    customer: { select: { name: true, phone: true } },
-                    vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
-                    items: true,
-                },
-                orderBy: buildOrderBy(sortBy, sortOrder),
-            }),
-            this.prisma.quotation.count({ where }),
-        ]);
+        // Execute sequentially to prevent connection pool exhaustion on Supabase
+        const total = await this.prisma.quotation.count({ where });
 
-        return paginate(data, total, page, parseInt(limit));
+        const data = await this.prisma.quotation.findMany({
+            where,
+            skip,
+            take,
+            include: {
+                customer: { select: { name: true, phone: true } },
+                vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
+                items: true,
+            },
+            orderBy: buildOrderBy(sortBy, sortOrder),
+        });
+
+        return paginate(data, total, page, take);
     }
 
     async findOne(id: string) {
@@ -329,5 +359,178 @@ export class QuotationsService {
                 where: { id },
             });
         });
+    }
+
+    async updateCustomerApproval(id: string, data: { status: 'APPROVED' | 'REJECTED'; reason?: string }) {
+        await this.findOne(id);
+        const status = data.status === 'APPROVED' ? 'CUSTOMER_APPROVED' : 'CUSTOMER_REJECTED';
+
+        const updateData: any = {
+            status,
+            customerApprovalStatus: data.status,
+            customerApproved: data.status === 'APPROVED',
+            customerApprovedAt: data.status === 'APPROVED' ? new Date() : null,
+            customerRejected: data.status === 'REJECTED',
+            customerRejectedAt: data.status === 'REJECTED' ? new Date() : null,
+            customerRejectionReason: data.reason || null,
+        };
+
+        // If approved, delete the quotation PDF
+        if (data.status === 'APPROVED') {
+            try {
+                await this.filesService.deleteFilesByCategory(
+                    'quotation',
+                    id,
+                    'quotation_pdf' as FileCategory,
+                );
+            } catch (error) {
+                console.error('Failed to delete quotation PDF:', error);
+            }
+        }
+
+        return this.prisma.quotation.update({
+            where: { id },
+            data: updateData,
+        });
+    }
+
+    async generateAndSendPdf(id: string) {
+        // Import the HTML template helper
+        const { generateQuotationHtmlTemplate } = await import('./templates/quotation-html.template');
+
+        // Fetch complete quotation data with all relations
+        const quotation = await this.prisma.quotation.findUnique({
+            where: { id },
+            include: {
+                customer: true,
+                vehicle: true,
+                items: {
+                    orderBy: { serialNumber: 'asc' },
+                },
+                serviceCenter: true,
+            },
+        });
+
+        if (!quotation) {
+            throw new NotFoundException('Quotation not found');
+        }
+
+        // Get WhatsApp number and validate
+        const rawWhatsapp = (quotation.customer as any)?.whatsappNumber || quotation.customer?.phone;
+        if (!rawWhatsapp) {
+            throw new BadRequestException('Customer WhatsApp number is missing');
+        }
+
+        let customerWhatsapp = rawWhatsapp.replace(/\D/g, '');
+
+        // Handle leading '0'
+        if (customerWhatsapp.length === 11 && customerWhatsapp.startsWith('0')) {
+            customerWhatsapp = customerWhatsapp.substring(1);
+        }
+
+        // Ensure 91 prefix for Indian numbers
+        if (customerWhatsapp.length === 10) {
+            customerWhatsapp = `91${customerWhatsapp}`;
+        }
+
+        // Validate WhatsApp number
+        if (customerWhatsapp.length < 10) {
+            throw new BadRequestException('Invalid WhatsApp number format');
+        }
+
+        // Prepare service center and advisor data
+        const serviceCenter = quotation.serviceCenter || {
+            name: '42 EV Tech & Services',
+            address: '123 Main Street, Industrial Area',
+            city: 'Pune',
+            state: 'Maharashtra',
+            pincode: '411001',
+            phone: '+91-20-12345678',
+        };
+
+        const serviceAdvisor = {
+            name: 'Service Advisor',
+            phone: '+91-9876543210',
+        };
+
+        // Generate HTML
+        const html = generateQuotationHtmlTemplate({
+            quotation,
+            serviceCenter,
+            serviceAdvisor,
+        });
+
+        // Generate PDF
+        const pdfBuffer = await this.pdfGenerator.generatePdfFromHtml(html, {
+            filename: `quotation-${quotation.quotationNumber}.pdf`,
+        });
+
+        // Upload PDF to file system
+        const { url: pdfUrl, file } = await this.filesService.uploadBuffer(
+            pdfBuffer,
+            `quotation-${quotation.quotationNumber}.pdf`,
+            {
+                category: 'quotation_pdf' as FileCategory,
+                relatedEntityType: 'quotation' as RelatedEntityType,
+                relatedEntityId: quotation.id,
+            }
+        );
+
+        // Update quotation status
+        await this.prisma.quotation.update({
+            where: { id },
+            data: {
+                status: 'SENT_TO_CUSTOMER',
+                sentToCustomer: true,
+                sentToCustomerAt: new Date(),
+                whatsappSent: true,
+                whatsappSentAt: new Date(),
+            },
+        });
+
+        // Update linked Lead if exists, or try to find one
+        let leadId = quotation.leadId;
+        if (!leadId && quotation.customerId) {
+            // Try to find an open lead
+            const existingLead = await this.prisma.lead.findFirst({
+                where: {
+                    customerId: quotation.customerId,
+                    status: { in: ['NEW', 'IN_DISCUSSION'] }
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            if (existingLead) {
+                leadId = existingLead.id;
+                // Link quotation to this lead
+                await this.prisma.quotation.update({
+                    where: { id },
+                    data: { leadId }
+                });
+            }
+        }
+
+        if (leadId) {
+            try {
+                await this.prisma.lead.update({
+                    where: { id: leadId },
+                    data: {
+                        status: 'IN_DISCUSSION', // Ensure status reflects active discussion
+                        quotationId: quotation.id, // Ensure link is reinforced
+                        convertedTo: 'quotation',
+                        convertedId: quotation.id
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to update linked lead:', error);
+            }
+        }
+
+        return {
+            success: true,
+            pdfUrl,
+            whatsappNumber: customerWhatsapp,
+            fileId: file.id,
+        };
     }
 }

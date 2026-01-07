@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { CreateFileDto, FileCategory } from './dto/create-file.dto';
+import { CreateFileDto, FileCategory, RelatedEntityType } from './dto/create-file.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class FilesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /**
    * Saves file metadata to the database.
@@ -16,6 +16,7 @@ export class FilesService {
     const isTemp = createFileDto.relatedEntityId?.startsWith('TEMP_');
 
     // Prepare foreign keys for the database relations
+    // For temp entities, we DON'T set foreign keys to avoid constraint violations
     let appointmentId: string | undefined;
     let jobCardId: string | undefined;
     let vehicleId: string | undefined;
@@ -23,27 +24,60 @@ export class FilesService {
 
     if (!isTemp && createFileDto.relatedEntityId) {
       const type = createFileDto.relatedEntityType?.toString().toLowerCase();
-      
-      if (type === 'appointment') appointmentId = createFileDto.relatedEntityId;
-      else if (type === 'job_card') jobCardId = createFileDto.relatedEntityId;
-      else if (type === 'vehicle') vehicleId = createFileDto.relatedEntityId;
-      else if (type === 'customer') customerId = createFileDto.relatedEntityId;
+
+      // Only set foreign keys for non-temp entities
+      // First check if explicitly provided
+      appointmentId = createFileDto.appointmentId;
+      jobCardId = createFileDto.jobCardId;
+      vehicleId = createFileDto.vehicleId;
+      customerId = createFileDto.customerId;
+
+      // Then auto-map if not already explicitly provided
+      if (type === 'appointment' && !appointmentId) appointmentId = createFileDto.relatedEntityId;
+      else if (type === 'job_card' && !jobCardId) jobCardId = createFileDto.relatedEntityId;
+      else if (type === 'vehicle' && !vehicleId) vehicleId = createFileDto.relatedEntityId;
+      else if (type === 'customer' && !customerId) customerId = createFileDto.relatedEntityId;
     }
 
     try {
+      // Check if file with this publicId already exists
+      if (createFileDto.publicId) {
+        const existingFile = await this.prisma.file.findUnique({
+          where: { publicId: createFileDto.publicId },
+        });
+
+        if (existingFile) {
+          // Update existing file with new relations if needed
+          return await this.prisma.file.update({
+            where: { id: existingFile.id },
+            data: {
+              appointmentId,
+              jobCardId,
+              vehicleId,
+              customerId,
+              relatedEntityId: createFileDto.relatedEntityId,
+              relatedEntityType: createFileDto.relatedEntityType,
+            },
+          });
+        }
+      }
+
       return await this.prisma.file.create({
         data: {
           url: createFileDto.url,
           filename: createFileDto.filename,
           format: createFileDto.format,
           bytes: createFileDto.bytes,
+          width: createFileDto.width,
+          height: createFileDto.height,
+          duration: createFileDto.duration,
           category: createFileDto.category,
           relatedEntityId: createFileDto.relatedEntityId,
           relatedEntityType: createFileDto.relatedEntityType,
           uploadedBy: createFileDto.uploadedBy,
           metadata: createFileDto.metadata || {},
-          publicId: null, // Explicitly null as we no longer use Cloudinary
-          
+          publicId: createFileDto.publicId || null,
+
           // Map relations
           appointmentId,
           jobCardId,
@@ -113,7 +147,7 @@ export class FilesService {
   }
 
   // --- DELETE LOGIC (UPDATED FOR LOCAL DISK) ---
-  
+
   async deleteFile(id: string) {
     const file = await this.prisma.file.findUnique({ where: { id } });
     if (!file) throw new NotFoundException('File not found');
@@ -155,10 +189,20 @@ export class FilesService {
   private deleteFromDisk(fileUrl: string) {
     try {
       // Determine base directory based on environment (Dev vs Prod)
-      const isDev = __dirname.includes('dms-dev');
-      const baseDir = isDev 
-          ? '/home/fortytwoev/dms-data/uploads/dev' 
-          : '/home/fortytwoev/dms-data/uploads/prod';
+      let baseDir = '/home/fortytwoev/dms-data/uploads/prod';
+
+      if (__dirname.includes('dms-dev')) {
+        baseDir = '/home/fortytwoev/dms-data/uploads/dev';
+      }
+
+      // Local Windows Development Override
+      try {
+        if (process.platform === 'win32') {
+          baseDir = path.join(process.cwd(), '../dms-frontend/public/uploads');
+        }
+      } catch (e) {
+        console.warn('Failed to detect Windows environment:', e);
+      }
 
       // Extract filename from URL (e.g., /uploads/file-123.jpg -> file-123.jpg)
       const fileName = fileUrl.split('/').pop();
@@ -170,6 +214,73 @@ export class FilesService {
       }
     } catch (err) {
       console.error(`Failed to delete local file: ${fileUrl}`, err);
+    }
+  }
+
+  /**
+   * Upload a Buffer (e.g., generated PDF) directly to disk
+   */
+  async uploadBuffer(
+    buffer: Buffer,
+    filename: string,
+    options: {
+      category: FileCategory;
+      relatedEntityType: RelatedEntityType;
+      relatedEntityId: string;
+      uploadedBy?: string;
+    }
+  ): Promise<{ url: string; file: any }> {
+    try {
+      // Determine base directory based on environment
+      let baseDir = '/home/fortytwoev/dms-data/uploads/prod';
+
+      if (__dirname.includes('dms-dev')) {
+        baseDir = '/home/fortytwoev/dms-data/uploads/dev';
+      }
+
+      // Local Windows Development Override
+      try {
+        if (process.platform === 'win32') {
+          // Save to frontend public/uploads for immediate serving
+          baseDir = path.join(process.cwd(), '../dms-frontend/public/uploads');
+        }
+      } catch (e) {
+        console.warn('Failed to detect Windows environment:', e);
+      }
+
+      // Ensure directory exists
+      if (!fs.existsSync(baseDir)) {
+        fs.mkdirSync(baseDir, { recursive: true });
+      }
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const uniqueFilename = `${timestamp}-${filename}`;
+      const filePath = path.join(baseDir, uniqueFilename);
+
+      // Write buffer to disk
+      fs.writeFileSync(filePath, buffer);
+
+      // Construct URL
+      const url = `/uploads/${uniqueFilename}`;
+
+      // Create database record
+      const fileMetadata = await this.createFileMetadata({
+        url,
+        filename: uniqueFilename,
+        format: path.extname(filename).substring(1), // Remove the leading dot
+        bytes: buffer.length,
+        category: options.category,
+        relatedEntityType: options.relatedEntityType,
+        relatedEntityId: options.relatedEntityId,
+        uploadedBy: options.uploadedBy,
+        publicId: null, // Local storage doesn't use publicId
+      });
+
+      return { url, file: fileMetadata };
+    } catch (error) {
+      console.error('Error uploading buffer:', error);
+      throw new BadRequestException(`Failed to upload file: ${error.message}`);
     }
   }
 }

@@ -69,6 +69,12 @@ export class QuotationsController {
         return this.quotationsService.updateCustomerApproval(id, data);
     }
 
+    @Post(':id/send-to-customer')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    async sendToCustomer(@Param('id') id: string) {
+        return this.quotationsService.generateAndSendPdf(id);
+    }
+
     @Delete(':id')
     @Roles('admin', 'sc_manager', 'service_advisor')
     remove(@Param('id') id: string) {
