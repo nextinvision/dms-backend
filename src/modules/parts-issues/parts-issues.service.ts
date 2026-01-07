@@ -437,26 +437,26 @@ export class PartsIssuesService {
         if (status) where.status = status;
         if (toServiceCenterId) where.toServiceCenterId = toServiceCenterId;
 
-        // Execute sequentially to prevent connection pool exhaustion
-        const total = await this.prisma.partsIssue.count({ where });
-
-        const data = await this.prisma.partsIssue.findMany({
-            where,
-            skip,
-            take: limitNum,
-            include: {
-                toServiceCenter: true,
-                requestedBy: true,
-                items: {
-                    include: {
-                        dispatches: {
-                            orderBy: { dispatchedAt: 'asc' }
+        const [data, total] = await Promise.all([
+            this.prisma.partsIssue.findMany({
+                where,
+                skip: Number(skip),
+                take: Number(limit),
+                include: {
+                    toServiceCenter: true,
+                    requestedBy: true,
+                    items: {
+                        include: {
+                            dispatches: {
+                                orderBy: { dispatchedAt: 'asc' }
+                            }
                         }
-                    }
+                    },
                 },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.partsIssue.count({ where }),
+        ]);
 
         // Manually populate centralInventoryPart for each item
         for (const issue of data) {
@@ -482,6 +482,12 @@ export class PartsIssuesService {
             include: {
                 toServiceCenter: true,
                 requestedBy: true,
+                purchaseOrder: {
+                    select: {
+                        id: true,
+                        poNumber: true,
+                    }
+                },
                 items: {
                     include: {
                         dispatches: {
@@ -1172,5 +1178,50 @@ export class PartsIssuesService {
                 },
             });
         });
+    }
+
+    /**
+     * Update transport details for a dispatched parts issue
+     * Only allowed for DISPATCHED or ADMIN_APPROVED status issues
+     */
+    async updateTransportDetails(id: string, transportDetails: any) {
+        const issue = await this.findOne(id);
+        
+        // Only allow updating transport details for dispatched or admin-approved issues
+        if (issue.status !== 'DISPATCHED' && issue.status !== 'ADMIN_APPROVED') {
+            throw new BadRequestException('Can only update transport details for dispatched or admin-approved issues');
+        }
+
+        // Update transport details on the parts issue
+        const updatedIssue = await this.prisma.partsIssue.update({
+            where: { id },
+            data: {
+                transportDetails: transportDetails || {},
+            },
+            include: {
+                toServiceCenter: true,
+                requestedBy: true,
+                purchaseOrder: true,
+                items: {
+                    include: {
+                        dispatches: {
+                            orderBy: { dispatchedAt: 'asc' }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Also update transport details on all dispatch records
+        if (transportDetails) {
+            await this.prisma.partsIssueDispatch.updateMany({
+                where: { issueId: id },
+                data: {
+                    transportDetails: transportDetails,
+                }
+            });
+        }
+
+        return updatedIssue;
     }
 }
