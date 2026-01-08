@@ -158,7 +158,6 @@ export class QuotationsService {
                         serialNumber: item.serialNumber || index + 1,
                         partName: item.partName,
                         partNumber: item.partNumber || null,
-                        hsnSacCode: item.hsnSacCode || null,
                         quantity: item.quantity,
                         rate: item.rate,
                         gstPercent: item.gstPercent,

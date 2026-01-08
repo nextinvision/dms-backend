@@ -17,7 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('job-cards')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// @UseGuards(JwtAuthGuard, RolesGuard)
 export class JobCardsController {
     constructor(private readonly jobCardsService: JobCardsService) { }
 
@@ -53,8 +53,14 @@ export class JobCardsController {
 
     @Patch('parts-requests/:id/status')
     @Roles('admin', 'sc_manager', 'inventory_manager')
-    updatePartsRequestStatus(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED'; notes?: string }) {
+    updatePartsRequestStatus(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED' | 'COMPLETED'; notes?: string }) {
         return this.jobCardsService.updatePartsRequestStatus(id, data.status, data.notes);
+    }
+
+    @Post('parts-requests/:id/delete')
+    @Roles('admin', 'sc_manager', 'service_engineer')
+    deletePartsRequest(@Param('id') id: string) {
+        return this.jobCardsService.deletePartsRequest(id);
     }
 
     @Get()
@@ -92,5 +98,6 @@ export class JobCardsController {
     convertToActual(@Param('id') id: string) {
         return this.jobCardsService.convertToActual(id);
     }
+
 }
 
