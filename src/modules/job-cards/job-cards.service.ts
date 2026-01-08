@@ -322,52 +322,84 @@ export class JobCardsService {
         });
         if (!jobCard) throw new NotFoundException('Job Card not found');
 
-        return this.prisma.$transaction(async (tx) => {
-            // 1. Assign the engineer
-            const updatedJobCard = await tx.jobCard.update({
-                where: { id },
-                data: {
-                    assignedEngineerId: assignEngineerDto.engineerId,
-                    status: 'ASSIGNED',
-                },
-            });
+        console.log('[AssignEngineer] Starting transaction...');
+        try {
+            // Execute in transaction to ensure atomicity
+            const updatedJobCard = await this.prisma.$transaction(async (tx) => {
+                // 1. Assign the engineer
+                console.log('[AssignEngineer] Updating JobCard status...');
+                const updated = await tx.jobCard.update({
+                    where: { id },
+                    data: {
+                        assignedEngineerId: assignEngineerDto.engineerId,
+                        status: 'ASSIGNED',
+                    },
+                });
+                console.log('[AssignEngineer] JobCard updated.');
 
-            // 2. Create Parts Request for SIM (Service Inventory Manager)
-            // "when service manager assign technician the part requests mentioned in the job card will send to the SIM"
-            if (jobCard.items && jobCard.items.length > 0) {
-                const partItems = jobCard.items.filter(item => item.itemType === 'part');
+                // 2. Create Parts Request for SIM (Service Inventory Manager)
 
-                if (partItems.length > 0) {
-                    // Check if a pending request already exists to avoid duplicates
-                    const existingRequest = await tx.partsRequest.findFirst({
-                        where: {
-                            jobCardId: id,
-                            status: 'PENDING'
-                        }
-                    });
+                // Fetch items again inside transaction or use jobCard.items from outer scope?
+                // jobCard.items is from outer scope (findUnique). That's fine.
+                console.log(`[AssignEngineer] JobCard ${id} has ${jobCard.items?.length || 0} items. Checking for parts...`);
 
-                    if (!existingRequest) {
-                        await tx.partsRequest.create({
-                            data: {
-                                jobCard: { connect: { id } },
-                                status: 'PENDING',
-                                items: {
-                                    create: partItems.map(item => ({
-                                        partName: item.partName,
-                                        partNumber: item.partCode,
-                                        requestedQty: item.qty,
-                                        isWarranty: item.isWarranty,
-                                        inventoryPartId: item.inventoryPartId,
-                                    }))
+                if (jobCard.items && jobCard.items.length > 0) {
+                    // Case-insensitive check for 'part'
+                    const partItems = jobCard.items.filter(item => item.itemType?.toLowerCase() === 'part');
+                    console.log(`[AssignEngineer] Found ${partItems.length} items with itemType='part'.`);
+
+                    if (partItems.length > 0) {
+                        try {
+                            // Check if a pending or approved request already exists to avoid duplicates
+                            const existingRequest = await tx.partsRequest.findFirst({
+                                where: {
+                                    jobCardId: id,
+                                    status: { in: ['PENDING', 'APPROVED'] }
                                 }
-                            }
-                        });
-                    }
-                }
-            }
+                            });
 
+                            if (existingRequest) {
+                                console.log(`[AssignEngineer] Existing active parts request found (ID: ${existingRequest.id}). Skipping creation.`);
+                            }
+
+                            if (!existingRequest) {
+                                console.log(`[AssignEngineer] Creating NEW parts request for ${partItems.length} items...`);
+                                const newRequest = await tx.partsRequest.create({
+                                    data: {
+                                        jobCard: { connect: { id } },
+                                        status: 'APPROVED', // Auto-approved by SC Manager upon assignment
+                                        items: {
+                                            create: partItems.map(item => ({
+                                                partName: item.partName || "Unknown Part",
+                                                partNumber: item.partCode || "N/A",
+                                                requestedQty: item.qty || 1,
+                                                isWarranty: item.isWarranty || false,
+                                                inventoryPartId: item.inventoryPartId || null,
+                                            }))
+                                        }
+                                    }
+                                });
+                                console.log(`[AssignEngineer] Parts Request Created Successfully! ID: ${newRequest.id}`);
+                            }
+                        } catch (innerError) {
+                            console.error('[AssignEngineer] Error inside parts creation logic:', innerError);
+                            throw innerError; // Re-throw to abort transaction
+                        }
+                    } else {
+                        console.log(`[AssignEngineer] No items of type 'part' found. Skipping request creation.`);
+                    }
+                } else {
+                    console.log(`[AssignEngineer] Job Card has no items. Skipping request creation.`);
+                }
+
+                return updated;
+            });
             return updatedJobCard;
-        });
+
+        } catch (error) {
+            console.error('[AssignEngineer] Transaction failed:', error);
+            throw error;
+        }
     }
 
     async updateStatus(id: string, updateStatusDto: UpdateJobCardStatusDto) {
@@ -406,7 +438,7 @@ export class JobCardsService {
     async getPendingPartsRequests(serviceCenterId?: string) {
         return this.prisma.partsRequest.findMany({
             where: {
-                status: 'PENDING',
+                status: { in: ['PENDING', 'APPROVED'] },
                 ...(serviceCenterId && {
                     jobCard: {
                         serviceCenterId: serviceCenterId
@@ -417,7 +449,8 @@ export class JobCardsService {
                 jobCard: {
                     include: {
                         vehicle: true,
-                        customer: true
+                        customer: true,
+                        assignedEngineer: true
                     }
                 },
                 items: true
@@ -426,10 +459,19 @@ export class JobCardsService {
         });
     }
 
-    async updatePartsRequestStatus(id: string, status: 'APPROVED' | 'REJECTED', notes?: string) {
+    async updatePartsRequestStatus(id: string, status: 'APPROVED' | 'REJECTED' | 'COMPLETED', notes?: string) {
         return this.prisma.partsRequest.update({
             where: { id },
             data: { status },
+        });
+    }
+
+    async deletePartsRequest(id: string) {
+        return this.prisma.$transaction(async (tx) => {
+            // Delete related items first
+            await tx.partsRequestItem.deleteMany({ where: { requestId: id } });
+            // Then delete the request
+            return tx.partsRequest.delete({ where: { id } });
         });
     }
 
@@ -457,7 +499,8 @@ export class JobCardsService {
             take: Number(limit),
             include: {
                 partsRequests: {
-                    include: { items: true }
+                    include: { items: true },
+                    orderBy: { createdAt: 'desc' }
                 },
                 customer: {
                     select: {
@@ -533,6 +576,7 @@ export class JobCardsService {
                 createdBy: { select: { id: true, name: true } },
                 updatedBy: { select: { id: true, name: true } },
                 quotation: true,
+
             },
             orderBy: { createdAt: 'desc' },
 

@@ -770,7 +770,6 @@ model QuotationItem {
   serialNumber Int?
   partName     String
   partNumber   String?
-  hsnSacCode   String?
   quantity     Int
   rate         Decimal
   gstPercent   Int
@@ -832,7 +831,6 @@ model InvoiceItem {
   invoiceId  String
   invoice    Invoice @relation(fields: [invoiceId], references: [id])
   name       String
-  hsnSacCode String?
   unitPrice  Decimal
   quantity   Int
   gstRate    Int

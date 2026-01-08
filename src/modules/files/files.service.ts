@@ -62,29 +62,39 @@ export class FilesService {
         }
       }
 
-      return await this.prisma.file.create({
-        data: {
-          url: createFileDto.url,
-          filename: createFileDto.filename,
-          format: createFileDto.format,
-          bytes: createFileDto.bytes,
-          width: createFileDto.width,
-          height: createFileDto.height,
-          duration: createFileDto.duration,
-          category: createFileDto.category,
-          relatedEntityId: createFileDto.relatedEntityId,
-          relatedEntityType: createFileDto.relatedEntityType,
-          uploadedBy: createFileDto.uploadedBy,
-          metadata: createFileDto.metadata || {},
-          publicId: createFileDto.publicId || null,
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          return await this.prisma.file.create({
+            data: {
+              url: createFileDto.url,
+              filename: createFileDto.filename,
+              format: createFileDto.format,
+              bytes: createFileDto.bytes,
+              width: createFileDto.width,
+              height: createFileDto.height,
+              duration: createFileDto.duration,
+              category: createFileDto.category,
+              relatedEntityId: createFileDto.relatedEntityId,
+              relatedEntityType: createFileDto.relatedEntityType,
+              uploadedBy: createFileDto.uploadedBy,
+              metadata: createFileDto.metadata || {},
+              publicId: createFileDto.publicId || null,
 
-          // Map relations
-          appointmentId,
-          jobCardId,
-          vehicleId,
-          customerId,
-        },
-      });
+              // Map relations
+              appointmentId,
+              jobCardId,
+              vehicleId,
+              customerId,
+            },
+          });
+        } catch (error) {
+          console.warn(`Attempt failed to create file metadata (remaining retries: ${retries - 1}):`, error.message);
+          retries--;
+          if (retries === 0) throw error;
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+        }
+      }
     } catch (error) {
       console.error('Error in createFileMetadata:', error);
       throw new BadRequestException(`Database Error: ${error.message}`);
