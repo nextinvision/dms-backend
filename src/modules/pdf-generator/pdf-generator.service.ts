@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer';
 
 @Injectable()
 export class PdfGeneratorService {
@@ -16,7 +16,7 @@ export class PdfGeneratorService {
             printBackground = true,
         } = options || {};
 
-        let browser: puppeteer.Browser | null = null;
+        let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
         try {
             this.logger.log(`Generating PDF: ${filename}`);

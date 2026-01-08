@@ -16,15 +16,23 @@ export class FilesService {
     const isTemp = createFileDto.relatedEntityId?.startsWith('TEMP_');
 
     // Prepare foreign keys for the database relations
-    let appointmentId: string | undefined = createFileDto.appointmentId;
-    let jobCardId: string | undefined = createFileDto.jobCardId;
-    let vehicleId: string | undefined = createFileDto.vehicleId;
-    let customerId: string | undefined = createFileDto.customerId;
+    // For temp entities, we DON'T set foreign keys to avoid constraint violations
+    let appointmentId: string | undefined;
+    let jobCardId: string | undefined;
+    let vehicleId: string | undefined;
+    let customerId: string | undefined;
 
     if (!isTemp && createFileDto.relatedEntityId) {
       const type = createFileDto.relatedEntityType?.toString().toLowerCase();
 
-      // Only auto-map if not already explicitly provided
+      // Only set foreign keys for non-temp entities
+      // First check if explicitly provided
+      appointmentId = createFileDto.appointmentId;
+      jobCardId = createFileDto.jobCardId;
+      vehicleId = createFileDto.vehicleId;
+      customerId = createFileDto.customerId;
+
+      // Then auto-map if not already explicitly provided
       if (type === 'appointment' && !appointmentId) appointmentId = createFileDto.relatedEntityId;
       else if (type === 'job_card' && !jobCardId) jobCardId = createFileDto.relatedEntityId;
       else if (type === 'vehicle' && !vehicleId) vehicleId = createFileDto.relatedEntityId;
@@ -54,29 +62,39 @@ export class FilesService {
         }
       }
 
-      return await this.prisma.file.create({
-        data: {
-          url: createFileDto.url,
-          filename: createFileDto.filename,
-          format: createFileDto.format,
-          bytes: createFileDto.bytes,
-          width: createFileDto.width,
-          height: createFileDto.height,
-          duration: createFileDto.duration,
-          category: createFileDto.category,
-          relatedEntityId: createFileDto.relatedEntityId,
-          relatedEntityType: createFileDto.relatedEntityType,
-          uploadedBy: createFileDto.uploadedBy,
-          metadata: createFileDto.metadata || {},
-          publicId: createFileDto.publicId || null,
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          return await this.prisma.file.create({
+            data: {
+              url: createFileDto.url,
+              filename: createFileDto.filename,
+              format: createFileDto.format,
+              bytes: createFileDto.bytes,
+              width: createFileDto.width,
+              height: createFileDto.height,
+              duration: createFileDto.duration,
+              category: createFileDto.category,
+              relatedEntityId: createFileDto.relatedEntityId,
+              relatedEntityType: createFileDto.relatedEntityType,
+              uploadedBy: createFileDto.uploadedBy,
+              metadata: createFileDto.metadata || {},
+              publicId: createFileDto.publicId || null,
 
-          // Map relations
-          appointmentId,
-          jobCardId,
-          vehicleId,
-          customerId,
-        },
-      });
+              // Map relations
+              appointmentId,
+              jobCardId,
+              vehicleId,
+              customerId,
+            },
+          });
+        } catch (error) {
+          console.warn(`Attempt failed to create file metadata (remaining retries: ${retries - 1}):`, error.message);
+          retries--;
+          if (retries === 0) throw error;
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+        }
+      }
     } catch (error) {
       console.error('Error in createFileMetadata:', error);
       throw new BadRequestException(`Database Error: ${error.message}`);

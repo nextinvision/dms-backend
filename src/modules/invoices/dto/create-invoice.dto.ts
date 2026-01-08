@@ -6,10 +6,6 @@ class InvoiceItemDto {
     @IsNotEmpty()
     name: string;
 
-    @IsString()
-    @IsOptional()
-    hsnSacCode?: string;
-
     @IsNumber()
     @IsNotEmpty()
     unitPrice: number;

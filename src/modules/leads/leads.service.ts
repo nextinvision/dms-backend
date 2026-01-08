@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { CreateLeadDto, LeadStatus } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class LeadsService {
@@ -10,26 +11,12 @@ export class LeadsService {
 
     async create(createLeadDto: CreateLeadDto) {
         // Generate lead number: LEAD-{YYYY}-{MM}-{SEQ}
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-        const prefix = `LEAD-${year}-${month}-`;
-
-        const lastLead = await this.prisma.lead.findFirst({
-            where: { leadNumber: { startsWith: prefix } },
-            orderBy: { leadNumber: 'desc' },
+        const leadNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'LEAD',
+            fieldName: 'leadNumber',
+            model: this.prisma.lead,
+            includeMonth: true,
         });
-
-        let seq = 1;
-        if (lastLead) {
-            const parts = lastLead.leadNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const leadNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         return this.prisma.lead.create({
             data: {

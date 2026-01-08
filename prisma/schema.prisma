@@ -52,6 +52,7 @@ model ServiceCenter {
   invoices       Invoice[]
   quotations     Quotation[]
   purchaseOrders PurchaseOrder[] @relation("ServiceCenterPurchaseOrders")
+  homeServices   HomeService[]
 }
 
 model User {
@@ -70,6 +71,7 @@ model User {
   requestedIssues         PartsIssue[]    @relation("RequestedBy")
   managerReviews          JobCard[]       @relation("ManagerReview")
   purchaseOrdersRequested PurchaseOrder[] @relation("PurchaseOrderRequestedBy")
+  homeServicesAssigned    HomeService[]   @relation("HomeServiceEngineer")
 
   // Audit trail relations - records created by this user
   customersCreated    Customer[]    @relation("CustomerCreatedBy")
@@ -83,6 +85,7 @@ model User {
   invoicesCreated     Invoice[]     @relation("InvoiceCreatedBy")
   invoicesUpdated     Invoice[]     @relation("InvoiceUpdatedBy")
   partsIssuesDispatched PartsIssueDispatch[] @relation("PartsIssueDispatchedBy")
+  homeServicesCreated HomeService[] @relation("HomeServiceCreatedBy")
 
   @@index([serviceCenterId])
 }
@@ -129,6 +132,7 @@ model Customer {
   jobCards     JobCard[]
   quotations   Quotation[]
   invoices     Invoice[]
+  homeServices HomeService[]
   files        File[]        @relation("CustomerFiles")
 
   @@index([phone])
@@ -170,6 +174,7 @@ model Vehicle {
   jobCards     JobCard[]
   quotations   Quotation[]
   invoices     Invoice[]
+  homeServices HomeService[]
   files        File[]        @relation("VehicleFiles")
 
   @@index([customerId])
@@ -382,6 +387,7 @@ model JobCardItem {
   itemType        String // "part" | "work_item"
   serialNumber    String?
   isWarranty      Boolean @default(false)
+  inventoryPartId String?
 
   @@index([jobCardId])
 }
@@ -413,7 +419,9 @@ model PartsRequestItem {
   id              String       @id @default(uuid())
   requestId       String
   request         PartsRequest @relation(fields: [requestId], references: [id])
-  inventoryPartId String
+  inventoryPartId String?
+  partName        String
+  partNumber      String?
   requestedQty    Int
   approvedQty     Int          @default(0)
   isWarranty      Boolean      @default(false)
@@ -767,7 +775,6 @@ model QuotationItem {
   serialNumber Int?
   partName     String
   partNumber   String?
-  hsnSacCode   String?
   quantity     Int
   rate         Decimal
   gstPercent   Int
@@ -829,7 +836,6 @@ model InvoiceItem {
   invoiceId  String
   invoice    Invoice @relation(fields: [invoiceId], references: [id])
   name       String
-  hsnSacCode String?
   unitPrice  Decimal
   quantity   Int
   gstRate    Int
@@ -956,4 +962,63 @@ model CheckInSlip {
 
   @@index([jobCardId])
   @@index([serviceCenterId])
+}
+
+// Home Service Model
+model HomeService {
+  id              String            @id @default(uuid())
+  serviceNumber   String            @unique
+  serviceCenterId String
+  serviceCenter   ServiceCenter     @relation(fields: [serviceCenterId], references: [id])
+  
+  // Customer Information
+  customerId      String?
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName    String
+  phone           String
+  
+  // Vehicle Information
+  vehicleId       String?
+  vehicle         Vehicle?          @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  vehicleModel    String
+  registration    String
+  
+  // Service Details
+  serviceAddress  String
+  serviceType     String
+  scheduledDate   DateTime
+  scheduledTime   String
+  estimatedCost   Decimal
+  
+  // Engineer Assignment
+  assignedEngineerId String?
+  assignedEngineer   User?           @relation("HomeServiceEngineer", fields: [assignedEngineerId], references: [id], onDelete: SetNull)
+  
+  // Status
+  status          HomeServiceStatus  @default(SCHEDULED)
+  
+  // Timestamps
+  startTime       DateTime?
+  completedAt     DateTime?
+  
+  // Audit trail
+  createdById     String?
+  createdBy       User?             @relation("HomeServiceCreatedBy", fields: [createdById], references: [id])
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([serviceCenterId])
+  @@index([customerId])
+  @@index([vehicleId])
+  @@index([assignedEngineerId])
+  @@index([status])
+  @@index([scheduledDate])
+}
+
+enum HomeServiceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }

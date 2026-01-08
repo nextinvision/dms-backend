@@ -16,6 +16,8 @@ import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { FilesModule } from './modules/files/files.module';
 import { LeadsModule } from './modules/leads/leads.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { HomeServicesModule } from './modules/home-services/home-services.module';
 import { TenantIsolationMiddleware } from './common/middleware/tenant.middleware';
 
 @Module({
@@ -37,6 +39,8 @@ import { TenantIsolationMiddleware } from './common/middleware/tenant.middleware
     AuthModule,
     FilesModule,
     LeadsModule,
+    ReportsModule,
+    HomeServicesModule,
   ],
   controllers: [],
   providers: [],

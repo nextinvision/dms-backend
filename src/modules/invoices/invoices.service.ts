@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { paginate, calculateSkip } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class InvoicesService {
@@ -17,23 +18,12 @@ export class InvoicesService {
         if (!sc) throw new NotFoundException('Service Center not found');
 
         // Generate Invoice Number: INV-{SCCODE}-{YYYY}-{SEQ}
-        const year = new Date().getFullYear();
-        const prefix = `INV-${sc.code}-${year}-`;
-        const lastInvoice = await this.prisma.invoice.findFirst({
-            where: { invoiceNumber: { startsWith: prefix } },
-            orderBy: { invoiceNumber: 'desc' },
+        const invoiceNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'INV',
+            fieldName: 'invoiceNumber',
+            model: this.prisma.invoice,
+            includeServiceCenterCode: sc.code,
         });
-
-        let seq = 1;
-        if (lastInvoice) {
-            const parts = lastInvoice.invoiceNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const invoiceNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         // Calculate totals
         const subtotal = items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
@@ -78,7 +68,7 @@ export class InvoicesService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, serviceCenterId, status, customerId } = query;
-        const skip = (page - 1) * limit;
+        const skip = calculateSkip(page, limit);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
@@ -100,15 +90,7 @@ export class InvoicesService {
             this.prisma.invoice.count({ where }),
         ]);
 
-        return {
-            data,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        return paginate(data, total, Number(page), Number(limit));
     }
 
     async findOne(id: string) {

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
+import { paginate, calculateSkip } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -46,23 +48,11 @@ export class PurchaseOrdersService {
         }
 
         // Generate PO Number: PO-{YYYY}-{SEQ}
-        const year = new Date().getFullYear();
-        const prefix = `PO-${year}-`;
-        const lastPO = await this.prisma.purchaseOrder.findFirst({
-            where: { poNumber: { startsWith: prefix } },
-            orderBy: { poNumber: 'desc' },
+        const poNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'PO',
+            fieldName: 'poNumber',
+            model: this.prisma.purchaseOrder,
         });
-
-        let seq = 1;
-        if (lastPO) {
-            const parts = lastPO.poNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const poNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         // Calculate totals
         const subtotal = items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
@@ -131,7 +121,7 @@ export class PurchaseOrdersService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, status, supplierId, fromServiceCenterId, onlyServiceCenterOrders } = query;
-        const skip = (page - 1) * limit;
+        const skip = calculateSkip(page, limit);
 
         const where: any = {};
         if (status) where.status = status;
@@ -160,21 +150,25 @@ export class PurchaseOrdersService {
                             inventoryPart: true,
                         },
                     },
+                    partsIssues: {
+                        include: {
+                            items: {
+                                include: {
+                                    dispatches: {
+                                        orderBy: { dispatchedAt: 'desc' }
+                                    }
+                                }
+                            }
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    },
                 },
                 orderBy: { createdAt: 'desc' },
             }),
             this.prisma.purchaseOrder.count({ where }),
         ]);
 
-        return {
-            data,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        return paginate(data, total, Number(page), Number(limit));
     }
 
     async findOne(id: string) {
@@ -188,6 +182,18 @@ export class PurchaseOrdersService {
                     include: {
                         inventoryPart: true,
                     },
+                },
+                partsIssues: {
+                    include: {
+                        items: {
+                            include: {
+                                dispatches: {
+                                    orderBy: { dispatchedAt: 'desc' }
+                                }
+                            }
+                        }
+                    },
+                    orderBy: { createdAt: 'desc' }
                 },
             },
         });

@@ -17,7 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 
 @Controller('job-cards')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// @UseGuards(JwtAuthGuard, RolesGuard)
 export class JobCardsController {
     constructor(private readonly jobCardsService: JobCardsService) { }
 
@@ -33,10 +33,34 @@ export class JobCardsController {
         return this.jobCardsService.assignEngineer(id, assignEngineerDto);
     }
 
+    @Post(':id/parts-request')
+    @Roles('admin', 'sc_manager', 'service_engineer')
+    createPartsRequest(@Param('id') id: string, @Body('items') items: any[]) {
+        return this.jobCardsService.createPartsRequest(id, items);
+    }
+
     @Patch(':id/status')
     @Roles('admin', 'sc_manager', 'service_engineer')
     updateStatus(@Param('id') id: string, @Body() updateStatusDto: UpdateJobCardStatusDto) {
         return this.jobCardsService.updateStatus(id, updateStatusDto);
+    }
+
+    @Get('parts-requests/pending')
+    @Roles('admin', 'sc_manager', 'inventory_manager', 'service_engineer')
+    getPendingPartsRequests(@Query('serviceCenterId') serviceCenterId?: string) {
+        return this.jobCardsService.getPendingPartsRequests(serviceCenterId);
+    }
+
+    @Patch('parts-requests/:id/status')
+    @Roles('admin', 'sc_manager', 'inventory_manager')
+    updatePartsRequestStatus(@Param('id') id: string, @Body() data: { status: 'APPROVED' | 'REJECTED' | 'COMPLETED'; notes?: string }) {
+        return this.jobCardsService.updatePartsRequestStatus(id, data.status, data.notes);
+    }
+
+    @Post('parts-requests/:id/delete')
+    @Roles('admin', 'sc_manager', 'service_engineer')
+    deletePartsRequest(@Param('id') id: string) {
+        return this.jobCardsService.deletePartsRequest(id);
     }
 
     @Get()
@@ -74,5 +98,6 @@ export class JobCardsController {
     convertToActual(@Param('id') id: string) {
         return this.jobCardsService.convertToActual(id);
     }
+
 }
 

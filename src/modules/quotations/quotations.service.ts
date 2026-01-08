@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 import { PdfGeneratorService } from '../pdf-generator/pdf-generator.service';
 import { FilesService } from '../files/files.service';
 import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
@@ -76,23 +77,11 @@ export class QuotationsService {
         }
 
         // Generate Quotation Number: QTN-{YYYY}-{SEQ}
-        const year = new Date().getFullYear();
-        const prefix = `QTN-${year}-`;
-        const lastQuotation = await this.prisma.quotation.findFirst({
-            where: { quotationNumber: { startsWith: prefix } },
-            orderBy: { quotationNumber: 'desc' },
+        const quotationNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'QTN',
+            fieldName: 'quotationNumber',
+            model: this.prisma.quotation,
         });
-
-        let seq = 1;
-        if (lastQuotation) {
-            const parts = lastQuotation.quotationNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const quotationNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         // Auto-link to existing open lead if not provided
         let leadId = inputLeadId;
@@ -158,7 +147,6 @@ export class QuotationsService {
                         serialNumber: item.serialNumber || index + 1,
                         partName: item.partName,
                         partNumber: item.partNumber || null,
-                        hsnSacCode: item.hsnSacCode || null,
                         quantity: item.quantity,
                         rate: item.rate,
                         gstPercent: item.gstPercent,
@@ -208,29 +196,30 @@ export class QuotationsService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, sortBy, sortOrder, serviceCenterId, status, customerId } = query;
-        const skip = calculateSkip(page, parseInt(limit));
+        const take = parseInt(limit) || 20;
+        const skip = calculateSkip(page, take);
 
         const where: any = {};
         if (serviceCenterId) where.serviceCenterId = serviceCenterId;
         if (status) where.status = status;
         if (customerId) where.customerId = customerId;
 
-        const [data, total] = await Promise.all([
-            this.prisma.quotation.findMany({
-                where,
-                skip,
-                take: parseInt(limit),
-                include: {
-                    customer: { select: { name: true, phone: true } },
-                    vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
-                    items: true,
-                },
-                orderBy: buildOrderBy(sortBy, sortOrder),
-            }),
-            this.prisma.quotation.count({ where }),
-        ]);
+        // Execute sequentially to prevent connection pool exhaustion on Supabase
+        const total = await this.prisma.quotation.count({ where });
 
-        return paginate(data, total, page, parseInt(limit));
+        const data = await this.prisma.quotation.findMany({
+            where,
+            skip,
+            take,
+            include: {
+                customer: { select: { name: true, phone: true } },
+                vehicle: { select: { registration: true, vehicleMake: true, vehicleModel: true } },
+                items: true,
+            },
+            orderBy: buildOrderBy(sortBy, sortOrder),
+        });
+
+        return paginate(data, total, page, take);
     }
 
     async findOne(id: string) {
