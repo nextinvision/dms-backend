@@ -61,9 +61,12 @@ export class JobCardsService {
                     jobCardNumber,
                     status: 'CREATED',
                     // Auto-pass to manager if warranty items exist
-                    passedToManager: hasWarrantyItems,
-                    managerReviewStatus: hasWarrantyItems ? 'PENDING' : null,
-                    passedToManagerAt: hasWarrantyItems ? new Date() : null,
+                    // passedToManager: hasWarrantyItems,
+                    // managerReviewStatus: hasWarrantyItems ? 'PENDING' : null,
+                    // passedToManagerAt: hasWarrantyItems ? new Date() : null,
+                    passedToManager: false,
+                    managerReviewStatus: null,
+                    passedToManagerAt: null,
                     serviceCenter: { connect: { id: jobCardData.serviceCenterId } },
                     customer: { connect: { id: jobCardData.customerId } },
                     vehicle: { connect: { id: jobCardData.vehicleId } },
@@ -183,11 +186,11 @@ export class JobCardsService {
             };
 
             // Auto-pass to manager if warranty items exist
-            if (hasWarrantyItems && existingJobCard.managerReviewStatus !== 'APPROVED') {
-                updateData.passedToManager = true;
-                updateData.managerReviewStatus = 'PENDING';
-                updateData.passedToManagerAt = new Date();
-            }
+            // if (hasWarrantyItems && existingJobCard.managerReviewStatus !== 'APPROVED') {
+            //     updateData.passedToManager = true;
+            //     updateData.managerReviewStatus = 'PENDING';
+            //     updateData.passedToManagerAt = new Date();
+            // }
 
             // Update items if provided
             if (items) {
@@ -251,9 +254,9 @@ export class JobCardsService {
 
     async passToManager(id: string, managerId: string) {
         const jobCard = await this.findOne(id);
-        if (!jobCard.isTemporary) {
-            throw new BadRequestException('Only temporary job cards can be sent for manager approval');
-        }
+        // if (!jobCard.isTemporary) {
+        //     throw new BadRequestException('Only temporary job cards can be sent for manager approval');
+        // }
 
         return this.prisma.jobCard.update({
             where: { id },
