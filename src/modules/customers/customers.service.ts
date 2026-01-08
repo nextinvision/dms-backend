@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { paginate, calculateSkip } from '../../common/utils/pagination.util';
+import { generateSimpleDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class CustomersService {
@@ -18,19 +20,12 @@ export class CustomersService {
         }
 
         // Generate customer number
-        const lastCustomer = await this.prisma.customer.findFirst({
-            orderBy: { customerNumber: 'desc' },
-        });
-
-        let nextNumber = 1;
-        if (lastCustomer && lastCustomer.customerNumber.startsWith('CUST-')) {
-            const lastCount = parseInt(lastCustomer.customerNumber.split('-')[1]);
-            if (!isNaN(lastCount)) {
-                nextNumber = lastCount + 1;
-            }
-        }
-
-        const customerNumber = `CUST-${nextNumber.toString().padStart(4, '0')}`;
+        const customerNumber = await generateSimpleDocumentNumber(
+            this.prisma,
+            'CUST',
+            'customerNumber',
+            this.prisma.customer,
+        );
 
         // Extract createdById if provided
         const { createdById, ...customerData } = createCustomerDto as any;
@@ -46,7 +41,7 @@ export class CustomersService {
 
     async findAll(query: any) {
         const { page = 1, limit = 20, search, sort, type, ...filters } = query;
-        const skip = (page - 1) * limit;
+        const skip = calculateSkip(page, limit);
 
         const where: any = {
             deletedAt: null,
@@ -80,15 +75,7 @@ export class CustomersService {
             this.prisma.customer.count({ where }),
         ]);
 
-        return {
-            data,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        return paginate(data, total, Number(page), Number(limit));
     }
 
     async findOne(id: string) {

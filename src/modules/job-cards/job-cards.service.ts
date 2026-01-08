@@ -6,6 +6,7 @@ import { UpdateJobCardStatusDto } from './dto/update-status.dto';
 import { FilesService } from '../files/files.service';
 import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class JobCardsService {
@@ -24,26 +25,12 @@ export class JobCardsService {
         if (!sc) throw new NotFoundException('Service Center not found');
 
         // Generate jobCardNumber: {scCode}-{YYYY}-{MM}-{SEQ}
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-        const prefix = `${sc.code}-${year}-${month}-`;
-
-        const lastJobCard = await this.prisma.jobCard.findFirst({
-            where: { jobCardNumber: { startsWith: prefix } },
-            orderBy: { jobCardNumber: 'desc' },
+        const jobCardNumber = await generateDocumentNumber(this.prisma, {
+            prefix: sc.code,
+            fieldName: 'jobCardNumber',
+            model: this.prisma.jobCard,
+            includeMonth: true,
         });
-
-        let seq = 1;
-        if (lastJobCard) {
-            const parts = lastJobCard.jobCardNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const jobCardNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         const { part2AData, part1Data, uploadedBy, items, ...jobCardData } = createJobCardDto;
 
@@ -489,108 +476,219 @@ export class JobCardsService {
         if (passedToManager === 'true') where.passedToManager = true;
         if (managerReviewStatus) where.managerReviewStatus = managerReviewStatus;
 
-        // Execute sequentially to prevent connection pool exhaustion on Supabase
-        const total = await this.prisma.jobCard.count({ where });
+        try {
+            // Execute sequentially to prevent connection pool exhaustion on Supabase
+            const total = await this.prisma.jobCard.count({ where });
 
-        const data = await this.prisma.jobCard.findMany({
+            const data = await this.prisma.jobCard.findMany({
+                where,
+                skip: Number(skip),
+                take: Number(limit),
+                include: {
+                    partsRequests: {
+                        include: { items: true },
+                        orderBy: { createdAt: 'desc' }
+                    },
+                    customer: {
+                        select: {
+                            id: true,
+                            name: true,
+                            phone: true,
+                            whatsappNumber: true,
+                            alternateNumber: true,
+                            email: true,
+                            address: true,
+                            cityState: true,
+                            pincode: true,
+                            customerType: true,
+                        }
+                    },
+                    // Include full vehicle data - single source of truth
+                    vehicle: {
+                        select: {
+                            id: true,
+                            registration: true,
+                            vehicleMake: true,
+                            vehicleModel: true,
+                            vehicleYear: true,
+                            vin: true,
+                            variant: true,
+                            motorNumber: true,
+                            chargerSerialNumber: true,
+                            purchaseDate: true,
+                            warrantyStatus: true,
+                            insuranceStartDate: true,
+                            insuranceEndDate: true,
+                            insuranceCompanyName: true,
+                            vehicleColor: true,
+                        }
+                    },
+                    appointment: {
+                        select: {
+                            id: true,
+                            appointmentDate: true,
+                            appointmentTime: true,
+                            serviceType: true,
+                            customerComplaint: true,
+                            previousServiceHistory: true,
+                            estimatedServiceTime: true,
+                            estimatedCost: true,
+                            odometerReading: true,
+                            estimatedDeliveryDate: true,
+                            assignedServiceAdvisor: true,
+                            assignedTechnician: true,
+                            pickupDropRequired: true,
+                            pickupAddress: true,
+                            pickupState: true,
+                            pickupCity: true,
+                            pickupPincode: true,
+                            dropAddress: true,
+                            dropState: true,
+                            dropCity: true,
+                            dropPincode: true,
+                            preferredCommunicationMode: true,
+                            arrivalMode: true,
+                            checkInNotes: true,
+                            checkInSlipNumber: true,
+                            checkInDate: true,
+                            checkInTime: true,
+                        }
+                    },
+                    assignedEngineer: {
+                        select: {
+                            id: true,
+                            name: true,
+                        }
+                    },
+                    createdBy: { select: { id: true, name: true } },
+                    updatedBy: { select: { id: true, name: true } },
+                    quotation: true,
+                },
+                orderBy: { createdAt: 'desc' },
+            });
 
-            where,
-            skip: Number(skip),
-            take: Number(limit),
-            include: {
-                partsRequests: {
-                    include: { items: true },
-                    orderBy: { createdAt: 'desc' }
+            return {
+                data,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit),
                 },
-                customer: {
-                    select: {
-                        id: true,
-                        name: true,
-                        phone: true,
-                        whatsappNumber: true,
-                        alternateNumber: true,
-                        email: true,
-                        address: true,
-                        cityState: true,
-                        pincode: true,
-                        customerType: true,
-                    }
-                },
-                // Include full vehicle data - single source of truth
-                vehicle: {
-                    select: {
-                        id: true,
-                        registration: true,
-                        vehicleMake: true,
-                        vehicleModel: true,
-                        vehicleYear: true,
-                        vin: true,
-                        variant: true,
-                        motorNumber: true,
-                        chargerSerialNumber: true,
-                        purchaseDate: true,
-                        warrantyStatus: true,
-                        insuranceStartDate: true,
-                        insuranceEndDate: true,
-                        insuranceCompanyName: true,
-                        vehicleColor: true,
-                    }
-                },
-                appointment: {
-                    select: {
-                        id: true,
-                        appointmentDate: true,
-                        appointmentTime: true,
-                        serviceType: true,
-                        customerComplaint: true,
-                        previousServiceHistory: true,
-                        estimatedServiceTime: true,
-                        estimatedCost: true,
-                        odometerReading: true,
-                        estimatedDeliveryDate: true,
-                        assignedServiceAdvisor: true,
-                        assignedTechnician: true,
-                        pickupDropRequired: true,
-                        pickupAddress: true,
-                        pickupState: true,
-                        pickupCity: true,
-                        pickupPincode: true,
-                        dropAddress: true,
-                        dropState: true,
-                        dropCity: true,
-                        dropPincode: true,
-                        preferredCommunicationMode: true,
-                        arrivalMode: true,
-                        checkInNotes: true,
-                        checkInSlipNumber: true,
-                        checkInDate: true,
-                        checkInTime: true,
-                    }
-                },
-                assignedEngineer: {
-                    select: {
-                        id: true,
-                        name: true,
-                    }
-                },
-                createdBy: { select: { id: true, name: true } },
-                updatedBy: { select: { id: true, name: true } },
-                quotation: true,
+            };
+        } catch (error: any) {
+            // Handle Prisma type mismatch errors (e.g., inventoryPartId NULL values)
+            if (error.message?.includes('inventoryPartId') || error.code === 'P2009') {
+                console.error('Prisma schema mismatch detected. Attempting to fix by querying without problematic relations...', error.message);
+                
+                // Retry query without partsRequests items to avoid the NULL issue
+                const total = await this.prisma.jobCard.count({ where });
+                
+                const data = await this.prisma.jobCard.findMany({
+                    where,
+                    skip: Number(skip),
+                    take: Number(limit),
+                    include: {
+                        partsRequests: {
+                            select: {
+                                id: true,
+                                jobCardId: true,
+                                status: true,
+                                urgency: true,
+                                createdAt: true,
+                                updatedAt: true,
+                            },
+                            orderBy: { createdAt: 'desc' }
+                        },
+                        customer: {
+                            select: {
+                                id: true,
+                                name: true,
+                                phone: true,
+                                whatsappNumber: true,
+                                alternateNumber: true,
+                                email: true,
+                                address: true,
+                                cityState: true,
+                                pincode: true,
+                                customerType: true,
+                            }
+                        },
+                        vehicle: {
+                            select: {
+                                id: true,
+                                registration: true,
+                                vehicleMake: true,
+                                vehicleModel: true,
+                                vehicleYear: true,
+                                vin: true,
+                                variant: true,
+                                motorNumber: true,
+                                chargerSerialNumber: true,
+                                purchaseDate: true,
+                                warrantyStatus: true,
+                                insuranceStartDate: true,
+                                insuranceEndDate: true,
+                                insuranceCompanyName: true,
+                                vehicleColor: true,
+                            }
+                        },
+                        appointment: {
+                            select: {
+                                id: true,
+                                appointmentDate: true,
+                                appointmentTime: true,
+                                serviceType: true,
+                                customerComplaint: true,
+                                previousServiceHistory: true,
+                                estimatedServiceTime: true,
+                                estimatedCost: true,
+                                odometerReading: true,
+                                estimatedDeliveryDate: true,
+                                assignedServiceAdvisor: true,
+                                assignedTechnician: true,
+                                pickupDropRequired: true,
+                                pickupAddress: true,
+                                pickupState: true,
+                                pickupCity: true,
+                                pickupPincode: true,
+                                dropAddress: true,
+                                dropState: true,
+                                dropCity: true,
+                                dropPincode: true,
+                                preferredCommunicationMode: true,
+                                arrivalMode: true,
+                                checkInNotes: true,
+                                checkInSlipNumber: true,
+                                checkInDate: true,
+                                checkInTime: true,
+                            }
+                        },
+                        assignedEngineer: {
+                            select: {
+                                id: true,
+                                name: true,
+                            }
+                        },
+                        createdBy: { select: { id: true, name: true } },
+                        updatedBy: { select: { id: true, name: true } },
+                        quotation: true,
+                    },
+                    orderBy: { createdAt: 'desc' },
+                });
 
-            },
-            orderBy: { createdAt: 'desc' },
-
-        });
-
-        return {
-            data,
-            pagination: {
-                total,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+                return {
+                    data,
+                    pagination: {
+                        total,
+                        page: Number(page),
+                        limit: Number(limit),
+                        totalPages: Math.ceil(total / limit),
+                    },
+                };
+            }
+            throw error;
+        }
     }
 
     async findOne(id: string) {

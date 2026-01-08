@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 import { PdfGeneratorService } from '../pdf-generator/pdf-generator.service';
 import { FilesService } from '../files/files.service';
 import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
@@ -76,23 +77,11 @@ export class QuotationsService {
         }
 
         // Generate Quotation Number: QTN-{YYYY}-{SEQ}
-        const year = new Date().getFullYear();
-        const prefix = `QTN-${year}-`;
-        const lastQuotation = await this.prisma.quotation.findFirst({
-            where: { quotationNumber: { startsWith: prefix } },
-            orderBy: { quotationNumber: 'desc' },
+        const quotationNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'QTN',
+            fieldName: 'quotationNumber',
+            model: this.prisma.quotation,
         });
-
-        let seq = 1;
-        if (lastQuotation) {
-            const parts = lastQuotation.quotationNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const quotationNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         // Auto-link to existing open lead if not provided
         let leadId = inputLeadId;

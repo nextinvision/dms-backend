@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePartsIssueDto } from './dto/create-parts-issue.dto';
 import { DispatchPartsIssueDto } from './dto/dispatch-parts-issue.dto';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class PartsIssuesService {
@@ -191,23 +192,11 @@ export class PartsIssuesService {
         const { items } = createDto;
 
         // Generate Issue Number: PI-{YYYY}-{SEQ}
-        const year = new Date().getFullYear();
-        const prefix = `PI-${year}-`;
-        const lastIssue = await this.prisma.partsIssue.findFirst({
-            where: { issueNumber: { startsWith: prefix } },
-            orderBy: { issueNumber: 'desc' },
+        const issueNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'PI',
+            fieldName: 'issueNumber',
+            model: this.prisma.partsIssue,
         });
-
-        let seq = 1;
-        if (lastIssue) {
-            const parts = lastIssue.issueNumber.split('-');
-            const lastSeq = parseInt(parts[parts.length - 1]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const issueNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         return this.prisma.$transaction(async (tx) => {
             // Resolve all parts by ID, partNumber, or partName (flexible matching)

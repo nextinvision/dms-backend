@@ -5,6 +5,7 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { FilesService } from '../files/files.service';
 import { FileCategory, RelatedEntityType } from '../files/dto/create-file.dto';
 import { paginate, calculateSkip, buildOrderBy } from '../../common/utils/pagination.util';
+import { generateDocumentNumber } from '../../common/utils/document-number.util';
 
 @Injectable()
 export class AppointmentsService {
@@ -12,6 +13,92 @@ export class AppointmentsService {
         private prisma: PrismaService,
         private filesService: FilesService,
     ) { }
+
+    /**
+     * Helper method to process documentation files and create file DTOs
+     */
+    private processDocumentationFiles(
+        documentationFiles: any,
+        relatedEntityId: string,
+        uploadedBy?: string
+    ): any[] {
+        const fileDtos = [];
+
+        if (documentationFiles.customerIdProof) {
+            fileDtos.push(...documentationFiles.customerIdProof
+                .filter((file: any) => file.filename)
+                .map((file: any) => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.CUSTOMER_ID_PROOF,
+                    relatedEntityId,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+        }
+
+        if (documentationFiles.vehicleRCCopy) {
+            fileDtos.push(...documentationFiles.vehicleRCCopy
+                .filter((file: any) => file.filename)
+                .map((file: any) => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.VEHICLE_RC,
+                    relatedEntityId,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+        }
+
+        if (documentationFiles.warrantyCardServiceBook) {
+            fileDtos.push(...documentationFiles.warrantyCardServiceBook
+                .filter((file: any) => file.filename)
+                .map((file: any) => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    category: FileCategory.WARRANTY_CARD,
+                    relatedEntityId,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+        }
+
+        if (documentationFiles.photosVideos) {
+            fileDtos.push(...documentationFiles.photosVideos
+                .filter((file: any) => file.filename)
+                .map((file: any) => ({
+                    url: file.url,
+                    publicId: file.publicId,
+                    filename: file.filename,
+                    format: file.format,
+                    bytes: file.bytes,
+                    width: file.width,
+                    height: file.height,
+                    duration: file.duration,
+                    category: FileCategory.PHOTOS_VIDEOS,
+                    relatedEntityId,
+                    relatedEntityType: RelatedEntityType.APPOINTMENT,
+                    uploadedBy,
+                })));
+        }
+
+        return fileDtos;
+    }
 
     async create(createAppointmentDto: CreateAppointmentDto) {
         // Check if vehicle has an active job card
@@ -53,25 +140,12 @@ export class AppointmentsService {
         }
 
         // Generate appointment number: APT-YYYY-MM-XXXX
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = (now.getMonth() + 1).toString().padStart(2, '0');
-        const prefix = `APT-${year}-${month}-`;
-
-        const lastAppointment = await this.prisma.appointment.findFirst({
-            where: { appointmentNumber: { startsWith: prefix } },
-            orderBy: { appointmentNumber: 'desc' },
+        const appointmentNumber = await generateDocumentNumber(this.prisma, {
+            prefix: 'APT',
+            fieldName: 'appointmentNumber',
+            model: this.prisma.appointment,
+            includeMonth: true,
         });
-
-        let seq = 1;
-        if (lastAppointment) {
-            const lastSeq = parseInt(lastAppointment.appointmentNumber.split('-')[3]);
-            if (!isNaN(lastSeq)) {
-                seq = lastSeq + 1;
-            }
-        }
-
-        const appointmentNumber = `${prefix}${seq.toString().padStart(4, '0')}`;
 
         const { documentationFiles, uploadedBy, ...appointmentData } = createAppointmentDto;
 
@@ -91,80 +165,11 @@ export class AppointmentsService {
 
         // Save file metadata if provided
         if (documentationFiles) {
-            const fileDtos = [];
-
-            if (documentationFiles.customerIdProof) {
-                fileDtos.push(...documentationFiles.customerIdProof
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        category: FileCategory.CUSTOMER_ID_PROOF,
-                        relatedEntityId: appointment.id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
-
-            if (documentationFiles.vehicleRCCopy) {
-                fileDtos.push(...documentationFiles.vehicleRCCopy
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        category: FileCategory.VEHICLE_RC,
-                        relatedEntityId: appointment.id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
-
-            if (documentationFiles.warrantyCardServiceBook) {
-                fileDtos.push(...documentationFiles.warrantyCardServiceBook
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        category: FileCategory.WARRANTY_CARD,
-                        relatedEntityId: appointment.id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
-
-            if (documentationFiles.photosVideos) {
-                fileDtos.push(...documentationFiles.photosVideos
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        duration: file.duration,
-                        category: FileCategory.PHOTOS_VIDEOS,
-                        relatedEntityId: appointment.id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
+            const fileDtos = this.processDocumentationFiles(
+                documentationFiles,
+                appointment.id,
+                uploadedBy
+            );
 
             if (fileDtos.length > 0) {
                 await this.filesService.createMultipleFiles(fileDtos);
@@ -261,85 +266,15 @@ export class AppointmentsService {
 
         // Handle new file associations if provided
         if (documentationFiles) {
-            const fileDtos = [];
-            /* Reusing logic from create */
-            if (documentationFiles.customerIdProof) {
-                fileDtos.push(...documentationFiles.customerIdProof
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        category: FileCategory.CUSTOMER_ID_PROOF,
-                        relatedEntityId: id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
-            if (documentationFiles.vehicleRCCopy) {
-                fileDtos.push(...documentationFiles.vehicleRCCopy
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        category: FileCategory.VEHICLE_RC,
-                        relatedEntityId: id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
-            if (documentationFiles.warrantyCardServiceBook) {
-                fileDtos.push(...documentationFiles.warrantyCardServiceBook
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        category: FileCategory.WARRANTY_CARD,
-                        relatedEntityId: id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
-            if (documentationFiles.photosVideos) {
-                fileDtos.push(...documentationFiles.photosVideos
-                    .filter(file => file.filename) // Only process files with filename
-                    .map(file => ({
-                        url: file.url,
-                        publicId: file.publicId,
-                        filename: file.filename,
-                        format: file.format,
-                        bytes: file.bytes,
-                        width: file.width,
-                        height: file.height,
-                        duration: file.duration,
-                        category: FileCategory.PHOTOS_VIDEOS,
-                        relatedEntityId: id,
-                        relatedEntityType: RelatedEntityType.APPOINTMENT,
-                        uploadedBy,
-                    })));
-            }
+            const fileDtos = this.processDocumentationFiles(
+                documentationFiles,
+                id,
+                uploadedBy
+            );
 
             if (fileDtos.length > 0) {
                 // We use try-catch here to silently ignore unique constraint violations if files already exist
                 try {
-                    // Filter out likely existing files? 
-                    // To be safe, we just try to create. If DB constraint exists on publicId, it might fail.
-                    // But usually, updating file metadata for existing files is better.
-                    // For now, simplicity:
                     await this.filesService.createMultipleFiles(fileDtos);
                 } catch (e) {
                     console.warn('Backend: Some files might already exist or failed to link.', e);
