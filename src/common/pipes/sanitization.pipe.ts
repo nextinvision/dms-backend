@@ -23,14 +23,22 @@ export class SanitizationPipe implements PipeTransform {
     }
 
     private sanitizeObject(obj: any): any {
-        const sanitized: any = Array.isArray(obj) ? [] : {};
+        try {
+            if (!obj) return obj;
+            if (Buffer.isBuffer(obj)) return obj;
 
-        for (const key in obj) {
-            if (obj.hasOwnProperty(key)) {
-                sanitized[key] = this.transform(obj[key], {} as ArgumentMetadata);
+            const sanitized: any = Array.isArray(obj) ? [] : {};
+
+            for (const key in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                    sanitized[key] = this.transform(obj[key], {} as ArgumentMetadata);
+                }
             }
-        }
 
-        return sanitized;
+            return sanitized;
+        } catch (error) {
+            console.error('Sanitization error:', error);
+            return obj;
+        }
     }
 }

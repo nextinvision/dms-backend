@@ -238,7 +238,7 @@ export class AppointmentsService {
     }
 
     async update(id: string, updateAppointmentDto: UpdateAppointmentDto) {
-        await this.findOne(id);
+        const existingAppointment = await this.findOne(id);
 
         // Exclude non-Prisma fields
         const { documentationFiles, uploadedBy, ...rest } = updateAppointmentDto;
@@ -251,6 +251,36 @@ export class AppointmentsService {
 
         if (updateAppointmentDto.estimatedDeliveryDate) {
             data.estimatedDeliveryDate = new Date(updateAppointmentDto.estimatedDeliveryDate);
+        }
+
+        // If vehicleId is being updated, check for duplicate active appointments (excluding current appointment)
+        if (updateAppointmentDto.vehicleId && updateAppointmentDto.vehicleId !== existingAppointment.vehicleId) {
+            const vehicle = await this.prisma.vehicle.findUnique({
+                where: { id: updateAppointmentDto.vehicleId },
+                select: { registration: true }
+            });
+
+            if (!vehicle) {
+                throw new NotFoundException(`Vehicle with ID ${updateAppointmentDto.vehicleId} not found`);
+            }
+
+            // Check for existing active appointment with this vehicle (excluding current appointment)
+            const existingActiveAppointment = await this.prisma.appointment.findFirst({
+                where: {
+                    vehicleId: updateAppointmentDto.vehicleId,
+                    id: { not: id }, // Exclude current appointment
+                    status: {
+                        notIn: ['CANCELLED', 'COMPLETED']
+                    }
+                },
+                select: { appointmentNumber: true }
+            });
+
+            if (existingActiveAppointment) {
+                throw new BadRequestException(
+                    `Vehicle ${vehicle.registration} already has an active appointment (${existingActiveAppointment.appointmentNumber}). Please complete or cancel existing appointment before scheduling a new one.`
+                );
+            }
         }
 
         // Audit trail - track who updated

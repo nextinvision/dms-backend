@@ -82,8 +82,16 @@ export class InvoicesService {
                 skip: Number(skip),
                 take: Number(limit),
                 include: {
-                    customer: { select: { name: true, phone: true } },
-                    vehicle: { select: { registration: true } },
+                    customer: { select: { name: true, phone: true, email: true } },
+                    vehicle: { select: { registration: true, vehicleModel: true, vehicleMake: true } },
+                    serviceCenter: true, // Include service center details
+                    jobCard: {
+                        select: {
+                            id: true,
+                            jobCardNumber: true
+                        }
+                    }, // Include job card number explicitly
+                    items: true, // Include items for complete invoice data
                 },
                 orderBy: { createdAt: 'desc' },
             }),
@@ -99,6 +107,7 @@ export class InvoicesService {
             include: {
                 customer: true,
                 vehicle: true,
+                serviceCenter: true, // Include service center details
                 items: true,
                 jobCard: true,
             },
@@ -111,7 +120,7 @@ export class InvoicesService {
         return invoice;
     }
 
-    async updateStatus(id: string, status: 'PAID' | 'CANCELLED') {
+    async updateStatus(id: string, status: 'PAID' | 'CANCELLED', paymentMethod?: string) {
         const invoice = await this.prisma.invoice.findUnique({
             where: { id },
             include: { jobCard: true },
@@ -123,7 +132,10 @@ export class InvoicesService {
             return this.prisma.$transaction(async (tx) => {
                 const updatedInvoice = await tx.invoice.update({
                     where: { id },
-                    data: { status: 'PAID' },
+                    data: {
+                        status: 'PAID',
+                        paymentMethod: paymentMethod || undefined
+                    },
                 });
 
                 // Post-payment hooks
@@ -160,7 +172,10 @@ export class InvoicesService {
 
         return this.prisma.invoice.update({
             where: { id },
-            data: { status },
+            data: {
+                status,
+                paymentMethod: paymentMethod || undefined
+            },
         });
     }
 }

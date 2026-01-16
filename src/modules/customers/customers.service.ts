@@ -137,13 +137,24 @@ export class CustomersService {
     async search(query: string, type: string = 'auto') {
         const where: any = { deletedAt: null };
 
-        if (type === 'phone' || (type === 'auto' && /^\+?\d+$/.test(query))) {
+        // Check for VIN or Vehicle Number explicitly, or if it's auto and looks alphanumeric (and not just numbers/phone)
+        if (type === 'vin' || type === 'vehicleNumber' || (type === 'auto' && /^[a-z0-9]+$/i.test(query) && !/^\d+$/.test(query))) {
+            where.vehicles = {
+                some: {
+                    OR: [
+                        { vin: { contains: query, mode: 'insensitive' } },
+                        { registration: { contains: query, mode: 'insensitive' } }
+                    ]
+                }
+            };
+        } else if (type === 'phone' || (type === 'auto' && /^\+?\d+$/.test(query))) {
             where.phone = { contains: query };
         } else if (type === 'email' || (type === 'auto' && query.includes('@'))) {
             where.email = { contains: query, mode: 'insensitive' };
         } else if (type === 'customerNumber' || (type === 'auto' && query.startsWith('CUST-'))) {
             where.customerNumber = { contains: query, mode: 'insensitive' };
         } else {
+            // Default search (name)
             where.name = { contains: query, mode: 'insensitive' };
         }
 

@@ -46,7 +46,8 @@ export class JobCardsService {
                     location: jobCardData.location,
                     isTemporary: jobCardData.isTemporary ?? true,
                     jobCardNumber,
-                    status: 'CREATED',
+                    // Set status to JOB_CARD_ACTIVE for temporary job cards (before quotation approval), CREATED for final ones
+                    status: (jobCardData.isTemporary ?? true) ? 'JOB_CARD_ACTIVE' : 'CREATED',
                     // Auto-pass to manager if warranty items exist
                     // passedToManager: hasWarrantyItems,
                     // managerReviewStatus: hasWarrantyItems ? 'PENDING' : null,
@@ -297,6 +298,7 @@ export class JobCardsService {
             data: {
                 isTemporary: false,
                 convertedToFinal: true,
+                status: 'CREATED', // Change status from DRAFT to CREATED after quotation approval
             },
         });
     }
@@ -580,10 +582,10 @@ export class JobCardsService {
             // Handle Prisma type mismatch errors (e.g., inventoryPartId NULL values)
             if (error.message?.includes('inventoryPartId') || error.code === 'P2009') {
                 console.error('Prisma schema mismatch detected. Attempting to fix by querying without problematic relations...', error.message);
-                
+
                 // Retry query without partsRequests items to avoid the NULL issue
                 const total = await this.prisma.jobCard.count({ where });
-                
+
                 const data = await this.prisma.jobCard.findMany({
                     where,
                     skip: Number(skip),

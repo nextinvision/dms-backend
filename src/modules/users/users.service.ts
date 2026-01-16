@@ -17,7 +17,7 @@ export class UsersService {
         }
 
         // Validate that global roles are not assigned to a service center
-        const globalRoles = ['admin', 'call_center', 'central_inventory_manager', 'inventory_manager'];
+        const globalRoles = ['admin', 'call_center', 'central_inventory_manager'];
         // @ts-ignore - Check if role string is in globalRoles array even if types don't perfectly overlap yet
         if (globalRoles.includes(createDto.role) && createDto.serviceCenterId) {
             throw new BadRequestException(`Users with role ${createDto.role} cannot be assigned to a service center`);
@@ -94,7 +94,7 @@ export class UsersService {
         const user = await this.prisma.user.findUnique({ where: { id } });
         if (!user) throw new NotFoundException('User not found');
 
-        const globalRoles = ['admin', 'call_center', 'central_inventory_manager', 'inventory_manager'];
+        const globalRoles = ['admin', 'call_center', 'central_inventory_manager'];
 
         // Determine new role
         const newRole = updateDto.role || user.role;

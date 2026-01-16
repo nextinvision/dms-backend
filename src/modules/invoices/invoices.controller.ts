@@ -38,11 +38,12 @@ export class InvoicesController {
     }
 
     @Patch(':id/status')
-    @Roles('admin', 'sc_manager')
+    @Roles('admin', 'sc_manager', 'service_advisor')
     updateStatus(
         @Param('id') id: string,
-        @Body('status') status: 'PAID' | 'CANCELLED',
+        @Body() body: { status: 'PAID' | 'CANCELLED'; paymentMethod?: string },
     ) {
-        return this.invoicesService.updateStatus(id, status);
+        return this.invoicesService.updateStatus(id, body.status, body.paymentMethod);
     }
+
 }

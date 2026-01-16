@@ -801,7 +801,9 @@ model Invoice {
   cgst            Decimal
   sgst            Decimal
   grandTotal      Decimal
+  paymentMethod   String?
   placeOfSupply   String?
+  dueDate         DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -1021,4 +1023,11 @@ enum HomeServiceStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+model SystemSetting {
+  key         String   @id
+  value       String
+  category    String   @default("general")
+  description String?
+  updatedAt   DateTime @updatedAt
 }
