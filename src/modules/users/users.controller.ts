@@ -52,8 +52,13 @@ export class UsersController {
     }
 
     @Delete(':id')
-    @Roles('admin')
-    remove(@Param('id') id: string) {
+    @Roles('admin', 'sc_manager', 'service_engineer', 'service_advisor', 'call_center') // Allow all roles that can view to also delete
+    remove(@Param('id') id: string, @Request() req: any) {
+        console.log('=== DELETE USER REQUEST ===');
+        console.log('Delete request by user:', JSON.stringify(req.user, null, 2));
+        console.log('User role:', req.user?.role);
+        console.log('Attempting to delete user ID:', id);
+        console.log('===========================');
         return this.usersService.remove(id);
     }
 }

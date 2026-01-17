@@ -8,6 +8,7 @@ import {
     UseGuards,
     Request,
     BadRequestException,
+    Delete,
 } from '@nestjs/common';
 import { ServiceCentersService } from './service-centers.service';
 import { CreateServiceCenterDto } from './dto/create-service-center.dto';
@@ -42,6 +43,12 @@ export class ServiceCentersController {
     @Roles('admin')
     update(@Param('id') id: string, @Body() data: any) {
         return this.scService.update(id, data);
+    }
+
+    @Delete(':id')
+    @Roles('admin')
+    remove(@Param('id') id: string) {
+        return this.scService.remove(id);
     }
 
     @Patch(':id/appointment-settings')

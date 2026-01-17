@@ -57,4 +57,17 @@ export class ServiceCentersService {
             data,
         });
     }
+
+    async remove(id: string) {
+        // Check existence
+        await this.findOne(id);
+
+        try {
+            return await this.prisma.serviceCenter.delete({
+                where: { id },
+            });
+        } catch (error) {
+            throw new BadRequestException('Cannot delete service center. It may have associated records (Job Cards, Inventory, etc.)');
+        }
+    }
 }

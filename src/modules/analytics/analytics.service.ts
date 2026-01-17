@@ -49,26 +49,51 @@ export class AnalyticsService {
     }
 
     async getRevenueStats(serviceCenterId?: string, months: number = 6) {
-        const stats = [];
-        for (let i = 0; i < months; i++) {
-            const date = subMonths(new Date(), i);
-            const start = startOfMonth(date);
-            const end = endOfMonth(date);
+        try {
+            // Validate and limit months to prevent performance issues
+            const validMonths = Math.min(Math.max(1, months || 6), 24); // Between 1 and 24 months
+            const stats = [];
+            
+            for (let i = 0; i < validMonths; i++) {
+                const date = subMonths(new Date(), i);
+                const start = startOfMonth(date);
+                const end = endOfMonth(date);
 
-            const where: any = { status: 'PAID', createdAt: { gte: start, lte: end } };
-            if (serviceCenterId) where.serviceCenterId = serviceCenterId;
+                const where: any = { 
+                    status: 'PAID', 
+                    createdAt: { 
+                        gte: start, 
+                        lte: end 
+                    } 
+                };
+                if (serviceCenterId) {
+                    where.serviceCenterId = serviceCenterId;
+                }
 
-            const revenue = await this.prisma.invoice.aggregate({
-                where,
-                _sum: { grandTotal: true },
-            });
+                try {
+                    const revenue = await this.prisma.invoice.aggregate({
+                        where,
+                        _sum: { grandTotal: true },
+                    });
 
-            stats.push({
-                month: start.toLocaleString('default', { month: 'short', year: 'numeric' }),
-                revenue: revenue._sum.grandTotal || 0,
-            });
+                    stats.push({
+                        month: start.toLocaleString('default', { month: 'short', year: 'numeric' }),
+                        revenue: revenue._sum.grandTotal || 0,
+                    });
+                } catch (error) {
+                    console.error(`Error fetching revenue for month ${i}:`, error);
+                    // Continue with next month even if one fails
+                    stats.push({
+                        month: start.toLocaleString('default', { month: 'short', year: 'numeric' }),
+                        revenue: 0,
+                    });
+                }
+            }
+
+            return stats.reverse();
+        } catch (error) {
+            console.error('Error in getRevenueStats:', error);
+            throw error;
         }
-
-        return stats.reverse();
     }
 }
