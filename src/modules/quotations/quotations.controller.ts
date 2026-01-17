@@ -33,6 +33,12 @@ export class QuotationsController {
         return this.quotationsService.update(id, updateDto);
     }
 
+    @Patch(':id')
+    @Roles('admin', 'sc_manager', 'service_advisor')
+    patch(@Param('id') id: string, @Body() updateDto: any) {
+        return this.quotationsService.update(id, updateDto);
+    }
+
     @Get()
     @Roles('admin', 'sc_manager', 'service_advisor', 'service_engineer')
     findAll(@Query() query: any) {

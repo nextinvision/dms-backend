@@ -287,6 +287,19 @@ export class QuotationsService {
                 });
             }
 
+            // If status is changing to CUSTOMER_APPROVED, delete the generated PDF
+            if (rest.status === 'CUSTOMER_APPROVED') {
+                try {
+                    await this.filesService.deleteFilesByCategory(
+                        'quotation',
+                        id,
+                        'quotation_pdf' as FileCategory,
+                    );
+                } catch (error) {
+                    console.error('Failed to delete quotation PDF during update:', error);
+                }
+            }
+
             // Update quotation
             return tx.quotation.update({
                 where: { id },

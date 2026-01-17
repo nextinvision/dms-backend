@@ -188,6 +188,18 @@ export class AppointmentsService {
         if (status) where.status = status;
         if (customerId) where.customerId = customerId;
         if (vehicleId) where.vehicleId = vehicleId;
+        if (query.customerArrived !== undefined) {
+            where.customerArrived = query.customerArrived === 'true';
+        }
+        if (query.excludeActiveJobCards === 'true') {
+            where.jobCards = {
+                none: {
+                    status: {
+                        notIn: ['INVOICED']
+                    }
+                }
+            };
+        }
 
         const [data, total] = await Promise.all([
             this.prisma.appointment.findMany({
@@ -294,8 +306,52 @@ export class AppointmentsService {
             data,
         });
 
-        // Handle new file associations if provided
+        // Handle file synchronization if documentationFiles provided
         if (documentationFiles) {
+            // 1. Get existing files linked to this appointment
+            const existingFiles = await this.filesService.getFiles(
+                RelatedEntityType.APPOINTMENT,
+                id
+            );
+
+            // 2. Identify which files are kept based on the incoming payload
+            // We use publicId as the unique identifier if available, otherwise fallback to URL or ID
+            const keptPublicIds = new Set<string>();
+            const keptUrls = new Set<string>();
+
+            const categories = ['customerIdProof', 'vehicleRCCopy', 'warrantyCardServiceBook', 'photosVideos'];
+
+            categories.forEach(category => {
+                if (documentationFiles[category] && Array.isArray(documentationFiles[category])) {
+                    documentationFiles[category].forEach((file: any) => {
+                        if (file.publicId) keptPublicIds.add(file.publicId);
+                        if (file.url) keptUrls.add(file.url);
+                    });
+                }
+            });
+
+            // 3. Delete files that are no longer in the payload
+            const filesToDelete = existingFiles.filter(file => {
+                // If file has publicId, check against kept publicIds
+                if (file.publicId) {
+                    return !keptPublicIds.has(file.publicId);
+                }
+                // Fallback to checking URL
+                return !keptUrls.has(file.url);
+            });
+
+            if (filesToDelete.length > 0) {
+                console.log(`[Appointment Update] Deleting ${filesToDelete.length} removed files`);
+                await Promise.all(
+                    filesToDelete.map(file =>
+                        this.filesService.deleteFile(file.id).catch(e =>
+                            console.warn(`Failed to delete file ${file.id}`, e)
+                        )
+                    )
+                );
+            }
+
+            // 4. Create new files (idempotent due to logic in FilesService or just add new ones)
             const fileDtos = this.processDocumentationFiles(
                 documentationFiles,
                 id,

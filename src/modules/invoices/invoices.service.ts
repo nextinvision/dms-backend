@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { paginate, calculateSkip } from '../../common/utils/pagination.util';
@@ -9,7 +9,21 @@ export class InvoicesService {
     constructor(private prisma: PrismaService) { }
 
     async create(createInvoiceDto: CreateInvoiceDto) {
-        const { serviceCenterId, items } = createInvoiceDto;
+        const { serviceCenterId, items, jobCardId } = createInvoiceDto;
+
+        // ✅ Check if invoice already exists for this job card
+        if (jobCardId) {
+            const existingInvoice = await this.prisma.invoice.findFirst({
+                where: { jobCardId }
+            });
+
+            if (existingInvoice) {
+                throw new BadRequestException(
+                    `An invoice already exists for this job card (Invoice #${existingInvoice.invoiceNumber}). ` +
+                    `Please use the existing invoice or cancel it before creating a new one.`
+                );
+            }
+        }
 
         // Get SC Code for invoice number
         const sc = await this.prisma.serviceCenter.findUnique({

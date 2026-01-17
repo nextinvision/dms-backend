@@ -57,4 +57,23 @@ export class ServiceCentersService {
             data,
         });
     }
+
+    async remove(id: string) {
+        // Check existence
+        await this.findOne(id);
+
+        // Check for constraints manually if needed, or rely on Prisma/DB constraints
+        // We know Users have SetNull, but JobCards likely restrict. 
+        // We will try to delete, if it fails due to FK violation, it throws.
+
+        try {
+            return await this.prisma.serviceCenter.delete({
+                where: { id },
+            });
+        } catch (error) {
+            // Basic error handling for now, let global filter handle generic DB errors 
+            // or specialized handling if code is P2003
+            throw new BadRequestException('Cannot delete service center. It may have associated records (Job Cards, Inventory, etc.)');
+        }
+    }
 }

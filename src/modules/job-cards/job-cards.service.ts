@@ -287,7 +287,8 @@ export class JobCardsService {
     async convertToActual(id: string) {
         const jobCard = await this.findOne(id);
         if (!jobCard.isTemporary) {
-            throw new BadRequestException('Job card is already an actual job card');
+            // Already converted, just return it (Idempotent)
+            return jobCard;
         }
         if (jobCard.managerReviewStatus !== 'APPROVED') {
             throw new BadRequestException('Job card must be approved by a manager before conversion');

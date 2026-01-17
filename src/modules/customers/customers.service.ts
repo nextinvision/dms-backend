@@ -137,8 +137,24 @@ export class CustomersService {
     async search(query: string, type: string = 'auto') {
         const where: any = { deletedAt: null };
 
-        // Check for VIN or Vehicle Number explicitly, or if it's auto and looks alphanumeric (and not just numbers/phone)
-        if (type === 'vin' || type === 'vehicleNumber' || (type === 'auto' && /^[a-z0-9]+$/i.test(query) && !/^\d+$/.test(query))) {
+        if (type === 'auto') {
+            where.OR = [
+                { name: { contains: query, mode: 'insensitive' } },
+                { phone: { contains: query } },
+                { email: { contains: query, mode: 'insensitive' } },
+                { customerNumber: { contains: query, mode: 'insensitive' } },
+                {
+                    vehicles: {
+                        some: {
+                            OR: [
+                                { vin: { contains: query, mode: 'insensitive' } },
+                                { registration: { contains: query, mode: 'insensitive' } }
+                            ]
+                        }
+                    }
+                }
+            ];
+        } else if (type === 'vin' || type === 'vehicleNumber') {
             where.vehicles = {
                 some: {
                     OR: [
@@ -147,11 +163,11 @@ export class CustomersService {
                     ]
                 }
             };
-        } else if (type === 'phone' || (type === 'auto' && /^\+?\d+$/.test(query))) {
+        } else if (type === 'phone') {
             where.phone = { contains: query };
-        } else if (type === 'email' || (type === 'auto' && query.includes('@'))) {
+        } else if (type === 'email') {
             where.email = { contains: query, mode: 'insensitive' };
-        } else if (type === 'customerNumber' || (type === 'auto' && query.startsWith('CUST-'))) {
+        } else if (type === 'customerNumber') {
             where.customerNumber = { contains: query, mode: 'insensitive' };
         } else {
             // Default search (name)

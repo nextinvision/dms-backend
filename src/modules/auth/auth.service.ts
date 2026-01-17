@@ -37,6 +37,7 @@ export class AuthService {
                 name: user.name,
                 role: user.role,
                 serviceCenterId: user.serviceCenterId,
+                serviceCenterName: (user as any).serviceCenter?.name || null,
             },
         };
     }
