@@ -11,8 +11,8 @@ export class CreateVehicleDto {
     registration: string;
 
     @IsString()
-    @IsNotEmpty()
-    vin: string;
+    @IsOptional()
+    vin?: string;
 
     @IsString()
     @IsNotEmpty()

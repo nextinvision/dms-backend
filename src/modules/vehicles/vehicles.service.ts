@@ -8,18 +8,28 @@ export class VehiclesService {
     constructor(private prisma: PrismaService) { }
 
     async create(createVehicleDto: CreateVehicleDto) {
-        // Check if registration or vin already exists
-        const existing = await this.prisma.vehicle.findFirst({
+        // Check if registration already exists
+        const existingByRegistration = await this.prisma.vehicle.findFirst({
             where: {
-                OR: [
-                    { registration: createVehicleDto.registration },
-                    { vin: createVehicleDto.vin },
-                ],
+                registration: createVehicleDto.registration,
             },
         });
 
-        if (existing) {
-            throw new BadRequestException('Vehicle with this registration or VIN already exists');
+        if (existingByRegistration) {
+            throw new BadRequestException('Vehicle with this registration number already exists');
+        }
+
+        // Check if VIN already exists (only if VIN is provided)
+        if (createVehicleDto.vin && createVehicleDto.vin.trim() !== '') {
+            const existingByVin = await this.prisma.vehicle.findFirst({
+                where: {
+                    vin: createVehicleDto.vin,
+                },
+            });
+
+            if (existingByVin) {
+                throw new BadRequestException('Vehicle with this VIN already exists');
+            }
         }
 
         // Verify customer exists
@@ -34,6 +44,7 @@ export class VehiclesService {
         return this.prisma.vehicle.create({
             data: {
                 ...createVehicleDto,
+                vin: createVehicleDto.vin && createVehicleDto.vin.trim() !== '' ? createVehicleDto.vin : null,
                 purchaseDate: createVehicleDto.purchaseDate ? new Date(createVehicleDto.purchaseDate) : null,
                 insuranceStartDate: createVehicleDto.insuranceStartDate ? new Date(createVehicleDto.insuranceStartDate) : null,
                 insuranceEndDate: createVehicleDto.insuranceEndDate ? new Date(createVehicleDto.insuranceEndDate) : null,
@@ -110,11 +121,31 @@ export class VehiclesService {
 
     async update(id: string, updateVehicleDto: UpdateVehicleDto) {
         await this.findOne(id);
+
+        // Check for duplicate VIN if VIN is being updated (only if VIN is provided)
+        if (updateVehicleDto.vin !== undefined && updateVehicleDto.vin !== null && updateVehicleDto.vin.trim() !== '') {
+            const existingByVin = await this.prisma.vehicle.findFirst({
+                where: {
+                    vin: updateVehicleDto.vin,
+                    id: { not: id }, // Exclude current vehicle
+                },
+            });
+
+            if (existingByVin) {
+                throw new BadRequestException('Vehicle with this VIN already exists');
+            }
+        }
+
         const data: any = { ...updateVehicleDto };
 
         if (updateVehicleDto.purchaseDate) data.purchaseDate = new Date(updateVehicleDto.purchaseDate);
         if (updateVehicleDto.insuranceStartDate) data.insuranceStartDate = new Date(updateVehicleDto.insuranceStartDate);
         if (updateVehicleDto.insuranceEndDate) data.insuranceEndDate = new Date(updateVehicleDto.insuranceEndDate);
+
+        // Handle VIN: if empty string is provided, set to null
+        if (updateVehicleDto.vin !== undefined) {
+            data.vin = updateVehicleDto.vin && updateVehicleDto.vin.trim() !== '' ? updateVehicleDto.vin : null;
+        }
 
         return this.prisma.vehicle.update({
             where: { id },

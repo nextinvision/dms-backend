@@ -147,7 +147,7 @@ model Vehicle {
   customerId           String
   customer             Customer      @relation(fields: [customerId], references: [id])
   registration         String        @unique
-  vin                  String        @unique
+  vin                  String?       @unique
   vehicleMake          String
   vehicleModel         String
   vehicleYear          Int
